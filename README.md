@@ -27,18 +27,16 @@ stack and coding conventions throughout.
    ```
    mysql -u root -p committee_management_db < database/migration_auth_security.sql
    ```
-5. Check `config/config.php` — `APP_URL` must exactly match your browser
-   address bar. If you placed the folder somewhere other than
-   `committee-management-system`, update this line:
+5. Configure the application base URL. For production, set the
+   `CMAS_APP_URL` environment variable to your HTTPS domain. For local
+   XAMPP, leave it unset and the application will use the current local URL.
    ```php
-   define('APP_URL', 'http://localhost/committee-management-system');
+   CMAS_APP_URL=https://your-domain.example
    ```
-6. Visit `http://localhost/committee-management-system/` in your browser.
+6. Visit your configured application URL in your browser.
    `index.php` will send you straight to the login page. **You will now be
-   asked for a 6-digit code after your password** — since no SMS/email
-   provider is connected yet, the code is shown directly on that page in a
-   "Demo Mode" banner. See `docs/AI_WORKLOAD_ALGORITHM.md`'s sibling note in
-   `includes/OtpService.php` for how to wire up a real provider later.
+   asked for a 6-digit code after your password** — the configured SMTP
+   provider sends the code to the user's email address.
 
 ## 2. Log in
 

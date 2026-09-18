@@ -21,19 +21,25 @@ define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME', 'Committee Management and Assignment System');
 define('APP_SHORT_NAME', 'CMAS');
 
-// *** IMPORTANT — READ THIS IF FORMS/BUTTONS AREN'T WORKING ***
-// APP_URL MUST exactly match the URL of the project folder in your browser's
-// address bar. Every single AJAX/fetch call in the app (Add/Edit/Delete,
-// search, filters, everything) is built from this constant on the client
-// side — if it's wrong, ALL of those calls silently fail with 404s that
-// look like "network error" in the UI.
-//   - Placed the project at C:\xampp\htdocs\committee-management-system\
-//     -> keep 'http://localhost/committee-management-system'
-//   - Placed it at C:\xampp\htdocs\cmas\ -> change to 'http://localhost/cmas'
-//   - Placed it directly in htdocs\ (no subfolder) -> change to 'http://localhost'
-// After changing this, do a hard refresh (Ctrl+F5) so the browser doesn't
-// use a cached copy of the old value.
-define('APP_URL', 'http://localhost/committee-management-system');
+// Set CMAS_APP_URL in production (for example, https://example.com).
+// When unset, derive the URL from the current request so local XAMPP and
+// hosted deployments both keep their own scheme and hostname.
+$configuredAppUrl = trim((string)getenv('CMAS_APP_URL'));
+if ($configuredAppUrl === '') {
+    $forwardedProto = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0] ?? ''));
+    $scheme = $forwardedProto === 'https' || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        ? 'https'
+        : 'http';
+    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+    $isLocalHost = $requestHost === 'localhost'
+        || str_starts_with($requestHost, 'localhost:')
+        || $requestHost === '127.0.0.1'
+        || str_starts_with($requestHost, '127.0.0.1:');
+    $configuredAppUrl = $requestHost !== '' && !$isLocalHost
+        ? $scheme . '://' . $requestHost
+        : 'http://localhost/committee-management-system';
+}
+define('APP_URL', rtrim($configuredAppUrl, '/'));
 
 define('APP_TIMEZONE', 'Asia/Manila');
 

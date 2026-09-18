@@ -152,7 +152,7 @@ try {
     $candidatesHash = hash('sha256', $taskTitle . '|' . $committeeId . '|' . json_encode($members));
 
     // ---- Reuse a very recent identical request (title unchanged, data unchanged) ----
-    $cacheMinutes = defined('OLLAMA_CACHE_MINUTES') ? OLLAMA_CACHE_MINUTES : 10;
+    $cacheMinutes = defined('GEMINI_CACHE_MINUTES') ? GEMINI_CACHE_MINUTES : 10;
     $cacheStmt = $pdo->prepare(
         "SELECT ai_available, ai_recommended_member_id, ai_generated_fields, ai_reasoning,
                 ai_model_used, ai_response_time_ms, ai_warning
