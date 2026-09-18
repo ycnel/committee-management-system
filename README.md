@@ -1,3 +1,4 @@
+
 # CMAS — Committee Management and Assignment System (Standalone)
 
 A complete, self-contained web app — its own login, its own database, its own
@@ -151,3 +152,9 @@ apply `database/migration_role_rename.sql` once to rename the stored
     Dashboard/Committees/Workload/Performance but no Create/Edit/Delete
     buttons, no **Smart AI Settings** link, and no
     Jurisdictions/Reports/Users/Activity Logs in the sidebar.
+
+# Lungsod ng Manila Committee Manaagement and Assignment System
+A web-based Committee Management and Assignment System (CMAS) designed for the City Council of Manila to streamline committee formation, member assignment, workload distribution, and performance monitoring.
+
+
+10a497870570fa0d28dc2d011226fc3fb6d0fe78
