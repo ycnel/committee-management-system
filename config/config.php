@@ -95,10 +95,22 @@ $configuredIsLocal = $configuredHost === 'localhost'
     || $configuredHost === '127.0.0.1'
     || $configuredHost === '::1';
 
+// App base path: the web-visible dir the app is served from.
+// '' when deployed at docroot, '/committee-management-system' under XAMPP.
+// Derived from SCRIPT_NAME minus the script's path relative to the app root —
+// DOCUMENT_ROOT can't be used because __DIR__ resolves junctions/symlinks.
+$appRoot = str_replace('\\', '/', dirname(__DIR__));
+$scriptFs = str_replace('\\', '/', (string)realpath((string)($_SERVER['SCRIPT_FILENAME'] ?? '')) ?: '');
+$relScript = str_starts_with($scriptFs, $appRoot) ? substr($scriptFs, strlen($appRoot)) : '';
+$scriptWeb = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+$basePath = ($relScript !== '' && $relScript !== '/' && substr($scriptWeb, -strlen($relScript)) === $relScript)
+    ? substr($scriptWeb, 0, -strlen($relScript))
+    : '';
+
 if ($configuredAppUrl === '' || ($configuredIsLocal && !$isLocalHost)) {
-    $configuredAppUrl = $requestHost !== '' && !$isLocalHost
-        ? $scheme . '://' . $requestHost
-        : 'http://localhost/committee-management-system';
+    $configuredAppUrl = $requestHost !== ''
+        ? $scheme . '://' . $requestHost . $basePath
+        : 'http://localhost' . $basePath;
 }
 define('APP_URL', rtrim($configuredAppUrl, '/'));
 
@@ -116,17 +128,18 @@ define('SESSION_LIFETIME', 60 * 60 * 8); // 8-hour maximum cookie lifetime
 define('IDLE_TIMEOUT', 60 * 30); // Total inactivity timeout
 define('IDLE_WARNING_SECONDS', 10); // Show the expiry modal this many seconds before logout
 
-// TEMPORARY local-dev bypass: disables the idle-timeout logout and the
+// Local-dev bypass: disables the idle-timeout logout and the
 // single-session replacement kick so dev sessions are never dropped.
-// Set to false to restore enforcement.
-define('SESSION_TIMEOUT_BYPASS', false);
+// Env override: CMAS_SESSION_BYPASS=1
+define('SESSION_TIMEOUT_BYPASS', cmas_env(['CMAS_SESSION_BYPASS'], '0') === '1');
 
 ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
 ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
 
 // ---- OTP delivery -----------------------------------------------------
-// Real email delivery through the configured Brevo SMTP account.
-define('OTP_DELIVERY_MODE', 'email');
+// 'email' sends through SMTP below; 'demo' shows the code on the verify page.
+// Env override: CMAS_OTP_DELIVERY=demo
+define('OTP_DELIVERY_MODE', cmas_env(['CMAS_OTP_DELIVERY'], 'email'));
 define('OTP_SMTP_HOST', getenv('CMAS_OTP_SMTP_HOST') ?: 'smtp-relay.brevo.com');
 define('OTP_SMTP_PORT', (int)(getenv('CMAS_OTP_SMTP_PORT') ?: 587));
 define('OTP_SMTP_USERNAME', getenv('CMAS_OTP_SMTP_USERNAME') ?: '');
@@ -135,9 +148,9 @@ define('OTP_SMTP_ENCRYPTION', getenv('CMAS_OTP_SMTP_ENCRYPTION') ?: 'tls');
 define('OTP_FROM_EMAIL', getenv('CMAS_OTP_FROM_EMAIL') ?: '');
 define('OTP_FROM_NAME', getenv('CMAS_OTP_FROM_NAME') ?: APP_NAME);
 
-// TEMPORARY local-dev bypass: skips the OTP step entirely after password
-// verification (no email delivery needed). Set to false to restore OTP.
-define('OTP_BYPASS', false);
+// Local-dev bypass: skips the OTP step entirely after password verification
+// (no email delivery needed). Env override: CMAS_OTP_BYPASS=1
+define('OTP_BYPASS', cmas_env(['CMAS_OTP_BYPASS'], '0') === '1');
 
 // ---- Pagination -------------------------------------------------------
 define('DEFAULT_PAGE_SIZE', 10);
