@@ -155,13 +155,26 @@ if ($selectedJurisdictionId <= 0 && $selectedCommitteeId <= 0) {
             <p class="text-muted small mb-0">No active jurisdictions are available.</p>
           <?php else: ?>
             <div class="jurisdiction-card-grid">
-              <?php foreach ($workloadJurisdictions as $jurisdiction): ?>
-                <a href="index.php?jurisdiction_id=<?= (int)$jurisdiction['jurisdiction_id'] ?>" class="jurisdiction-card text-decoration-none" aria-label="View <?= e($jurisdiction['jurisdiction_name']) ?> workload">
+              <?php
+              $jurisdictionIcons = [
+                  'Finance'         => 'bi-cash-coin',
+                  'Social Services' => 'bi-heart-pulse',
+                  'Infrastructure'  => 'bi-cone-striped',
+                  'Public Safety'   => 'bi-shield-check',
+              ];
+              foreach ($workloadJurisdictions as $jurisdiction):
+                $jIcon = $jurisdictionIcons[$jurisdiction['category'] ?? ''] ?? 'bi-geo-alt';
+              ?>
+                <a href="index.php?jurisdiction_id=<?= (int)$jurisdiction['jurisdiction_id'] ?>" class="jurisdiction-card text-decoration-none" data-jurisdiction-id="<?= (int)$jurisdiction['jurisdiction_id'] ?>" aria-label="View <?= e($jurisdiction['jurisdiction_name']) ?> workload">
+                  <div class="jurisdiction-card-top">
+                    <span class="jurisdiction-card-icon"><i class="bi <?= e($jIcon) ?>"></i></span>
+                    <span class="jurisdiction-card-count"><?= (int)$jurisdiction['committee_count'] ?> committee<?= (int)$jurisdiction['committee_count'] === 1 ? '' : 's' ?></span>
+                  </div>
                   <div class="jurisdiction-card-details">
-                    <div class="jurisdiction-card-meta"><span><?= e($jurisdiction['category'] ?: 'General scope') ?></span><span><?= (int)$jurisdiction['committee_count'] ?> committee<?= (int)$jurisdiction['committee_count'] === 1 ? '' : 's' ?></span></div>
+                    <div class="jurisdiction-card-meta"><span class="jurisdiction-card-chip"><?= e($jurisdiction['category'] ?: 'General scope') ?></span></div>
                     <div class="jurisdiction-card-title"><?= e($jurisdiction['jurisdiction_name']) ?></div>
                     <div class="jurisdiction-card-description"><?= e(truncate($jurisdiction['description'] ?: 'Select to view associated committees and workloads.', 110)) ?></div>
-                    <div class="jurisdiction-card-footer"><span class="jurisdiction-card-status status-active">Active</span><span class="jurisdiction-action-button"><i class="bi bi-arrow-right"></i></span></div>
+                    <div class="jurisdiction-card-footer"><span class="jurisdiction-card-status status-active">Active</span><span class="jurisdiction-card-cta">View committees <i class="bi bi-arrow-right"></i></span></div>
                   </div>
                 </a>
               <?php endforeach; ?>
@@ -170,6 +183,77 @@ if ($selectedJurisdictionId <= 0 && $selectedCommitteeId <= 0) {
         </section>
       </div>
     </div>
+
+<div class="modal fade" id="jurisdictionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-geo-alt text-primary"></i> <span id="jurisdictionModalName">Jurisdiction</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small" id="jurisdictionModalDesc"></p>
+        <div id="jurisdictionCommitteeList" class="workload-committee-grid"></div>
+        <p class="text-muted small d-none mb-0" id="jurisdictionModalEmpty">No active committees are associated with this jurisdiction.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const modalEl = document.getElementById('jurisdictionModal');
+  if (!modalEl || !window.bootstrap) return;
+  const modal = new bootstrap.Modal(modalEl);
+  const list = document.getElementById('jurisdictionCommitteeList');
+  const empty = document.getElementById('jurisdictionModalEmpty');
+  const nameEl = document.getElementById('jurisdictionModalName');
+  const descEl = document.getElementById('jurisdictionModalDesc');
+
+  document.querySelectorAll('[data-jurisdiction-id]').forEach(function (card) {
+    card.addEventListener('click', function (e) {
+      e.preventDefault();
+      const jid = card.getAttribute('data-jurisdiction-id');
+      list.innerHTML = '<div class="text-muted small">Loading committees…</div>';
+      empty.classList.add('d-none');
+      modal.show();
+
+      fetch(window.APP_URL + '/modules/workload/ajax_committees.php?jurisdiction_id=' + encodeURIComponent(jid), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }, cache: 'no-store'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.success) {
+            list.innerHTML = '<div class="text-muted small">' + (data.message || 'Unable to load committees.') + '</div>';
+            return;
+          }
+          nameEl.textContent = data.jurisdiction.jurisdiction_name;
+          descEl.textContent = data.jurisdiction.description || 'Choose a committee to continue.';
+          list.innerHTML = '';
+          if (!data.committees.length) { empty.classList.remove('d-none'); return; }
+          data.committees.forEach(function (c) {
+            const a = document.createElement('a');
+            a.href = 'committee.php?committee_id=' + encodeURIComponent(c.committee_id);
+            a.className = 'workload-committee-card';
+            a.innerHTML = '<span class="workload-committee-inner">'
+              + '<span class="workload-committee-form"><i class="bi bi-people-fill workload-committee-card-icon"></i></span>'
+              + '<span class="workload-committee-data"><span class="workload-committee-text">'
+              + '<span class="workload-committee-card-name"></span>'
+              + '<span class="workload-committee-card-description"></span>'
+              + '</span></span></span>';
+            a.querySelector('.workload-committee-card-name').textContent = c.committee_name;
+            a.querySelector('.workload-committee-card-description').textContent =
+              c.description || 'View tasks, assignments, priorities, and due dates for this committee.';
+            list.appendChild(a);
+          });
+        })
+        .catch(function () {
+          list.innerHTML = '<div class="text-muted small">Unable to load committees right now.</div>';
+        });
+    });
+  });
+});
+</script>
     <?php
     include __DIR__ . '/../../layouts/footer.php';
     exit;

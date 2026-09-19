@@ -48,6 +48,7 @@ include __DIR__ . '/../../layouts/header.php';
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
   <div class="main-content">
+  <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     
     <div>
