@@ -11,10 +11,21 @@
  */
 
 // ---- Database credentials ----------------------------------------
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'committee_management_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// Reads HostForge environment variables first; falls back to local XAMPP values.
+function cmas_env(array $keys, string $default = ''): string
+{
+    foreach ($keys as $k) {
+        $v = getenv($k);
+        if ($v === false || $v === '') { $v = $_ENV[$k] ?? $_SERVER[$k] ?? false; }
+        if ($v !== false && $v !== '') { return (string)$v; }
+    }
+    return $default;
+}
+define('DB_HOST', cmas_env(['DB_HOST'], 'localhost'));
+define('DB_PORT', cmas_env(['DB_PORT'], '3306'));
+define('DB_NAME', cmas_env(['DB_DATABASE', 'DB_NAME'], 'committee_management_db'));
+define('DB_USER', cmas_env(['DB_USERNAME', 'DB_USER'], 'root'));
+define('DB_PASS', cmas_env(['DB_PASSWORD', 'DB_PASS'], ''));
 define('DB_CHARSET', 'utf8mb4');
 
 // ---- Application settings -----------------------------------------
