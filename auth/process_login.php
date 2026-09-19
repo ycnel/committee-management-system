@@ -106,8 +106,16 @@ try {
 
 } catch (Throwable $e) {
     error_log('Login error: ' . $e->getMessage());
-    setFlash('danger', OTP_DELIVERY_MODE === 'email'
-        ? 'We could not send the verification email. Please try again later.'
-        : 'A system error occurred. Please try again later.');
+
+    // TEMPORARY: while APP_DEBUG is true, show the real error so we can
+    // find out why the OTP email fails. Set APP_DEBUG to false in
+    // config/config.php afterwards to restore the generic message.
+    if (APP_DEBUG) {
+        setFlash('danger', 'DEBUG: ' . $e->getMessage());
+    } else {
+        setFlash('danger', OTP_DELIVERY_MODE === 'email'
+            ? 'We could not send the verification email. Please try again later.'
+            : 'A system error occurred. Please try again later.');
+    }
     redirect(APP_URL . '/login.php');
 }
