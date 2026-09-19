@@ -72,7 +72,7 @@ Members are just `users` rows with the "Committee Member" role.
 | **Module 6** Committee Reporting | `modules/committee_reports/` | Print / Export PDF / Export Excel for 3 report types |
 | **Smart AI Workload Distribution** | `includes/WorkloadAI.php`, `modules/workload/ai_settings.php` | Rule-based weighted scoring engine that recommends who to assign a task to. Full writeup: `docs/AI_WORKLOAD_ALGORITHM.md` |
 | User Management | `pages/users.php` | Admin-only account CRUD + role assignment |
-| Activity Logs | `pages/activity_logs.php` | Admin-only audit trail |
+| Audit Logs | `pages/activity_logs.php` | Admin-only audit trail |
 | Profile | `pages/profile.php` | Change own password |
 
 **Design system:** every page shares `assets/css/style.css` plus
@@ -84,25 +84,26 @@ of what changed in this revision.
 
 ## 4. Access control
 
-Role permissions were revised so Administrator is a view/system-administration
-role and Committee Chairperson (formerly "Legislative Staff") is the sole
-operational/management role for committees and workload:
+Role permissions: Administrator has the full feature set (every operational
+module plus system administration), Committee Chairperson manages operations,
+and Committee Member is read-only/own-data:
 
-- **Administrator** — view-only across Committee Management, Workload
-  Distribution, Committee Performance, and system data. Cannot create/edit
-  committees, cannot assign or manage tasks/workloads. Is the ONLY role that
-  can access and edit **Smart AI Settings** (`modules/workload/ai_settings.php`).
+- **Administrator** — full access to every feature: Committee Management,
+  Workload Distribution, Committee Performance, Jurisdictions, Committee
+  Reports (including create/edit/assign/delete), plus the admin-only
+  **User Management**, **Audit Logs**, and **Smart AI Settings**
+  (`modules/workload/ai_settings.php`) screens.
 - **Committee Chairperson** — manages committees (create/edit, assign/remove
   members), assigns and manages tasks/workloads, and uses Smart Workload
   Distribution (including "Generate with AI" in the Assign Task modal). Does
   NOT see the Smart AI Settings screen/button.
-- **Committee Member** — view-only: sees all committees (read-only) and their
-  own workload/tasks only (not other members' tasks). Cannot create/edit
-  committees, cannot assign tasks, cannot access Smart AI Settings or the
-  cross-member Workload Recommendation panel.
-- **Jurisdictions / Committee Reports / User Management / Activity Logs** —
+- **Committee Member** — view-only: sees the committees they belong to
+  (read-only) and their own workload/tasks only (not other members' tasks).
+  Cannot create/edit committees, cannot assign tasks, cannot access Smart AI
+  Settings or the cross-member Workload Recommendation panel.
+- **Jurisdictions / Committee Reports / User Management / Audit Logs** —
   unchanged by this update: Administrator/Committee Chairperson (User
-  Management and Activity Logs remain Administrator-only). These modules
+  Management and Audit Logs remain Administrator-only). These modules
   were out of scope for the role revision above; ask if you'd like the same
   view-only treatment applied to Administrator here too.
 
@@ -125,7 +126,7 @@ once so the notification bell can store and filter recipient-specific records.
   automatically switch to local copies if you ever populate
   `assets/vendor/`, but that's optional — the app works out of the box.
 - Every write action (Insert/Update/Delete/Export/Login) is logged to
-  `activity_logs` and viewable under **Activity Logs**.
+  `activity_logs` and viewable under **Audit Logs**.
 - All SQL uses prepared statements; all output is escaped via `e()`; all
   state-changing requests require a valid CSRF token
   (`includes/functions.php::requireCsrf()`).
@@ -156,7 +157,7 @@ once so the notification bell can store and filter recipient-specific records.
 11. Log out, log back in as `member1@cmas.local` → confirm they can see
     Dashboard/Committees/Workload/Performance but no Create/Edit/Delete
     buttons, no **Smart AI Settings** link, and no
-    Jurisdictions/Reports/Users/Activity Logs in the sidebar.
+    Jurisdictions/Reports/Users/Audit Logs in the sidebar.
 
 # Lungsod ng Manila Committee Manaagement and Assignment System
 A web-based Committee Management and Assignment System (CMAS) designed for the City Council of Manila to streamline committee formation, member assignment, workload distribution, and performance monitoring.
