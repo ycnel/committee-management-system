@@ -104,11 +104,6 @@ $menuItems = [
   </div>
 </aside>
 
-<!-- Edge-mounted collapse toggle: straddles the sidebar's right border at header height -->
-<button class="sidebar-edge-toggle" id="sidebarToggle" aria-label="Toggle Sidebar">
-  <i class="bi bi-chevron-left toggle-icon"></i>
-</button>
-
 <!-- Sidebar Overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
@@ -359,21 +354,6 @@ $menuItems = [
   .sidebar-overlay.active { display: block; }
 }
 
-.sidebar-edge-toggle {
-  position: fixed; top: 28px; left: var(--gov-sidebar-width); transform: translate(-50%, -50%);
-  z-index: 1001;
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid var(--ln-border, #E5E7EB); background: var(--ln-canvas, #fff);
-  color: var(--primary-blue, #0B2E59); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  transition: left 0.3s ease, background 0.2s ease, color 0.2s ease;
-}
-.sidebar-edge-toggle:hover { background: var(--sb-canvas); color: #fff; border-color: var(--sb-canvas); }
-.sidebar-edge-toggle .toggle-icon { font-size: 13px; }
-.sidebar.collapsed ~ .sidebar-edge-toggle { left: 72px; }
-@media (max-width: 991.98px) { .sidebar-edge-toggle { display: none; } }
-
 .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; backdrop-filter: blur(2px); }
 .sidebar-overlay.active { display: block; }
 </style>
@@ -461,60 +441,33 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.getElementById('sidebarToggle');
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
     const mainContent = document.querySelector('.main-content');
+    const menuBtn = document.getElementById('mobileSidebarToggle');
 
-    if (toggleBtn && sidebar && mainContent) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            sidebar.classList.toggle('collapsed');
-            mainContent.classList.toggle('sidebar-collapsed');
-            if (window.innerWidth <= 992) {
-                if (sidebar.classList.contains('collapsed')) {
-                    sidebar.classList.remove('active');
-                    if (overlay) overlay.classList.remove('active');
-                    document.body.style.overflow = '';
-                } else {
-                    sidebar.classList.add('active');
-                    if (overlay) overlay.classList.add('active');
-                    document.body.style.overflow = 'hidden';
-                }
-            }
-            const icon = this.querySelector('.toggle-icon');
-            if (icon) {
-                icon.className = sidebar.classList.contains('collapsed')
-                    ? 'bi bi-chevron-right toggle-icon'
-                    : 'bi bi-chevron-left toggle-icon';
-            }
-            void mainContent.offsetWidth;
-        });
+    function closeMobileDrawer() {
+        sidebar.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+        document.body.style.overflow = '';
+        if (menuBtn) {
+            menuBtn.setAttribute('aria-expanded', 'false');
+            const icon = menuBtn.querySelector('i');
+            if (icon) icon.className = 'bi bi-list';
+        }
     }
 
     if (overlay) {
         overlay.addEventListener('click', function() {
-            sidebar.classList.remove('active');
+            closeMobileDrawer();
             sidebar.classList.remove('collapsed');
-            overlay.classList.remove('active');
-            document.body.style.overflow = '';
             if (mainContent) mainContent.classList.remove('sidebar-collapsed');
-            const toggleBtn = document.getElementById('sidebarToggle');
-            if (toggleBtn) {
-                const icon = toggleBtn.querySelector('.toggle-icon');
-                if (icon) icon.className = 'bi bi-chevron-left toggle-icon';
-            }
         });
     }
 
     document.querySelectorAll('.nav-link').forEach(function(link) {
         link.addEventListener('click', function() {
-            if (window.innerWidth <= 992) {
-                sidebar.classList.remove('active');
-                if (overlay) overlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
+            if (window.innerWidth <= 992) closeMobileDrawer();
         });
     });
 
@@ -523,15 +476,9 @@ document.addEventListener('DOMContentLoaded', function() {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function() {
             if (window.innerWidth > 992) {
-                if (sidebar.classList.contains('active')) {
-                    sidebar.classList.remove('active');
-                    if (overlay) overlay.classList.remove('active');
-                    document.body.style.overflow = '';
-                }
-                if (sidebar.classList.contains('collapsed')) {
-                    mainContent.classList.add('sidebar-collapsed');
-                } else {
-                    mainContent.classList.remove('sidebar-collapsed');
+                if (sidebar.classList.contains('active')) closeMobileDrawer();
+                if (mainContent) {
+                    mainContent.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
                 }
             }
         }, 200);
@@ -540,16 +487,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             if (sidebar.classList.contains('active') || sidebar.classList.contains('collapsed')) {
-                sidebar.classList.remove('active');
+                closeMobileDrawer();
                 sidebar.classList.remove('collapsed');
-                if (overlay) overlay.classList.remove('active');
-                document.body.style.overflow = '';
                 if (mainContent) mainContent.classList.remove('sidebar-collapsed');
-                const toggleBtn = document.getElementById('sidebarToggle');
-                if (toggleBtn) {
-                    const icon = toggleBtn.querySelector('.toggle-icon');
-                    if (icon) icon.className = 'bi bi-chevron-left toggle-icon';
-                }
             }
         }
     });

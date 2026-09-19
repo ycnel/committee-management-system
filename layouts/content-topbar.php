@@ -16,7 +16,7 @@
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/auth-loading.css">
 
 <nav class="topnav" aria-label="Top navigation">
-  <button type="button" class="mobile-sidebar-toggle d-lg-none" id="mobileSidebarToggle" aria-label="Open menu">
+  <button type="button" class="mobile-sidebar-toggle" id="mobileSidebarToggle" aria-label="Toggle sidebar menu" aria-expanded="false">
     <i class="bi bi-list"></i>
   </button>
 
@@ -104,11 +104,22 @@ document.addEventListener('DOMContentLoaded', function () {
   const btn = document.getElementById('mobileSidebarToggle');
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebarOverlay');
+  const mainContent = document.querySelector('.main-content');
   if (btn && sidebar) {
+    const icon = btn.querySelector('i');
     btn.addEventListener('click', function () {
-      sidebar.classList.add('active');
-      if (overlay) overlay.classList.add('active');
-      document.body.style.overflow = 'hidden';
+      if (window.innerWidth <= 991.98) {
+        const open = sidebar.classList.toggle('active');
+        if (overlay) overlay.classList.toggle('active', open);
+        document.body.style.overflow = open ? 'hidden' : '';
+        if (icon) icon.className = open ? 'bi bi-x-lg' : 'bi bi-list';
+        btn.setAttribute('aria-expanded', String(open));
+      } else {
+        const collapsed = sidebar.classList.toggle('collapsed');
+        if (mainContent) mainContent.classList.toggle('sidebar-collapsed', collapsed);
+        btn.setAttribute('aria-expanded', String(!collapsed));
+        void mainContent.offsetWidth;
+      }
     });
   }
 
