@@ -89,6 +89,43 @@ $recentActivityStmt = $pdo->prepare(
 $recentActivityStmt->execute([':user_id' => currentUserId()]);
 $recentActivity = $recentActivityStmt->fetchAll();
 
+// ---- Completion-rate summary ----------------------------------------
+$completion = $pdo->query(
+    "SELECT COUNT(*) AS total,
+            SUM(status = 'Completed') AS done,
+            SUM(status = 'Overdue') AS overdue
+     FROM workload_assignments"
+)->fetch();
+$completionRate = ((int)$completion['total'] > 0)
+    ? round(((int)$completion['done'] / (int)$completion['total']) * 100)
+    : 0;
+
+// ---- Upcoming tasks (incomplete, soonest due first) -------------------
+$upcomingTasks = $pdo->query(
+    "SELECT wa.task_title, wa.due_date, wa.priority, wa.status,
+            u.full_name, c.committee_name
+     FROM workload_assignments wa
+     INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
+     INNER JOIN users u ON u.id = cm.user_id
+     INNER JOIN committees c ON c.committee_id = cm.committee_id
+     WHERE wa.status <> 'Completed'
+     ORDER BY wa.due_date IS NULL, wa.due_date ASC
+     LIMIT 5"
+)->fetchAll();
+
+// ---- Recently created committees ---------------------------------------
+$recentCommittees = $pdo->query(
+    "SELECT c.committee_id, c.committee_name, c.status, c.created_at,
+            (SELECT COUNT(*) FROM committee_members cm
+              WHERE cm.committee_id = c.committee_id AND cm.status = 'Active') AS member_count
+     FROM committees c
+     ORDER BY c.created_at DESC, c.committee_id DESC
+     LIMIT 5"
+)->fetchAll();
+
+$priorityColors = ['Low' => 'secondary', 'Medium' => 'primary', 'High' => 'warning', 'Urgent' => 'danger'];
+$committeeStatusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' => 'danger'];
+
 $avatarPalette = ['#0B2E59', '#D4AF37', '#C62828', '#1F4E85', '#8A6D1D', '#4B5563'];
 function dashInitials(string $name): string
 {
@@ -142,9 +179,13 @@ include __DIR__ . '/layouts/header.php';
               <span class="badge badge-soft-gold mt-2 ms-3">Recorded assignments</span>
             </div>
           </div>
-          <div class="d-flex gap-2 mt-3">
+          <div class="d-flex gap-2 mt-3 flex-wrap">
             <span class="badge badge-soft-neutral"><?= (int)$totals['active_members'] ?> members</span>
             <span class="badge badge-soft-neutral"><?= (int)$totals['active_jurisdictions'] ?> jurisdictions</span>
+            <span class="badge badge-soft-neutral"><?= $completionRate ?>% completion rate</span>
+            <?php if ((int)($completion['overdue'] ?? 0) > 0): ?>
+              <span class="badge badge-soft-gold"><?= (int)$completion['overdue'] ?> overdue</span>
+            <?php endif; ?>
           </div>
         </div>
       </div>
@@ -213,11 +254,55 @@ include __DIR__ . '/layouts/header.php';
         </div>
       </div>
 
-
+      <!-- Recent committees -->
+      <div class="card hero-card mt-3">
+        <div class="card-body">
+          <div class="member-card-heading"><div><span class="performance-kicker">Recently added</span><h5>Recent Committees</h5></div><a href="<?= e(APP_URL) ?>/modules/committees/index.php" class="small">View all</a></div>
+          <?php if (empty($recentCommittees)): ?>
+            <p class="text-muted small mt-2 mb-0">No committees created yet.</p>
+          <?php else: ?>
+            <div class="mt-2">
+              <?php foreach ($recentCommittees as $c): ?>
+                <a href="<?= e(APP_URL) ?>/modules/committees/view.php?id=<?= (int)$c['committee_id'] ?>" class="d-flex justify-content-between align-items-center gap-2 py-2 border-bottom text-decoration-none">
+                  <div>
+                    <div class="small fw-semibold text-dark"><?= e($c['committee_name']) ?></div>
+                    <div class="text-muted small"><?= (int)$c['member_count'] ?> member<?= (int)$c['member_count'] === 1 ? '' : 's' ?> · <?= e(formatDate($c['created_at'])) ?></div>
+                  </div>
+                  <span class="badge bg-<?= e($committeeStatusColors[$c['status']] ?? 'secondary') ?>"><?= e($c['status']) ?></span>
+                </a>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
 
     </div>
 
     <div class="col-lg-4">
+
+      <!-- Upcoming tasks -->
+      <div class="card hero-card mb-3">
+        <div class="card-body">
+          <div class="member-card-heading"><div><span class="performance-kicker">Deadlines</span><h5>Upcoming Tasks</h5></div><a href="<?= e(APP_URL) ?>/modules/workload/index.php" class="small">View all</a></div>
+          <?php if (empty($upcomingTasks)): ?>
+            <p class="text-muted small mt-2 mb-0">No pending tasks.</p>
+          <?php else: ?>
+            <div class="mt-2">
+              <?php foreach ($upcomingTasks as $t):
+                $isOverdue = $t['status'] === 'Overdue' || ($t['due_date'] && $t['due_date'] < date('Y-m-d'));
+              ?>
+                <div class="py-2 border-bottom">
+                  <div class="d-flex justify-content-between align-items-center gap-2">
+                    <div class="small fw-semibold"><?= e(truncate($t['task_title'], 40)) ?></div>
+                    <span class="badge bg-<?= $isOverdue ? 'danger' : e($priorityColors[$t['priority']] ?? 'secondary') ?>"><?= $isOverdue ? 'Overdue' : e($t['priority']) ?></span>
+                  </div>
+                  <div class="text-muted small mt-1"><?= e($t['full_name']) ?> · <?= e($t['committee_name']) ?> · due <?= e(formatDate($t['due_date'])) ?></div>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+      </div>
 
       <!-- Personal activity -->
       <div class="card hero-card">

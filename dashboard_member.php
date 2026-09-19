@@ -130,7 +130,7 @@ include __DIR__ . '/layouts/header.php';
       </div>
 
       <div class="col-lg-5 member-dashboard-column"><div class="card hero-card member-dashboard-card member-dashboard-top-card"><div class="card-body">
-        <div class="member-card-heading"><div><span class="performance-kicker">Account history</span><h5>My activity</h5></div><a href="<?= e(APP_URL) ?>/pages/activity_logs.php" class="small">View all</a></div>
+        <div class="member-card-heading"><div><span class="performance-kicker">Account history</span><h5>My activity</h5></div></div>
         <?php if (!$myActivity): ?><p class="text-muted small mb-0">No activity recorded yet.</p><?php endif; ?>
         <?php foreach ($myActivity as $activity): ?><div class="member-activity-row"><span class="member-activity-icon"><i class="bi bi-activity"></i></span><div><div class="small fw-semibold"><?= e($activity['action']) ?></div><div class="text-muted small"><?= e(formatDateTime($activity['created_at'])) ?><?= $activity['ip_address'] ? ' &middot; ' . e($activity['ip_address']) : '' ?></div><?php if ($activity['session_duration_seconds']): ?><div class="text-muted small">Session: <?= e((string)$activity['session_duration_seconds']) ?> seconds</div><?php endif; ?></div></div><?php endforeach; ?>
         </div></div>
