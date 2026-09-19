@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function resetIdleTimer() {
-    if (idleExpiryShown) return;
+    if (window.SESSION_TIMEOUT_BYPASS === true || idleExpiryShown) return;
     idleWarningShown = false;
     window.clearTimeout(idleTimer);
     window.clearTimeout(idleWarningTimer);

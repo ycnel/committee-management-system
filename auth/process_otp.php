@@ -3,8 +3,9 @@
  * auth/process_otp.php
  * ------------------------------------------------------------------
  * Verifies the OTP submitted from otp_verify.php. Only on success is
- * the real authenticated session created — this is the single place
- * in the whole app where $_SESSION['user_id'] gets set on login.
+ * the real authenticated session created (via createAuthSession() in
+ * includes/auth.php, also used by the OTP_BYPASS path in
+ * process_login.php).
  * ------------------------------------------------------------------
  */
 
@@ -52,23 +53,7 @@ if (!$user) {
     redirect(APP_URL . '/login.php');
 }
 
-unset($_SESSION['pending_otp_user_id'], $_SESSION['pending_otp_email'], $_SESSION['demo_otp_code']);
-session_regenerate_id(true);
-
-$sessionToken = bin2hex(random_bytes(32));
-$sessionStmt = $pdo->prepare(
-    'UPDATE users SET current_session_token = :token WHERE id = :id'
-);
-$sessionStmt->execute([':token' => $sessionToken, ':id' => $user['id']]);
-
-$_SESSION['user_id']       = (int)$user['id'];
-$_SESSION['session_token']  = $sessionToken;
-$_SESSION['full_name']     = $user['full_name'];
-$_SESSION['email']         = $user['email'];
-$_SESSION['role_id']       = (int)$user['role_id'];
-$_SESSION['role_name']     = $user['role_name'];
-$_SESSION['last_activity'] = time();
-$_SESSION['login_started_at'] = time();
+createAuthSession($user);
 
 logActivity((int)$user['id'], 'Login', 'User logged in successfully (OTP verified).');
 setFlash('success', 'Welcome back, ' . $user['full_name'] . '!');

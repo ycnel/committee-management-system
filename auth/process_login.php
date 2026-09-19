@@ -80,6 +80,13 @@ try {
     // Credentials valid — reset the failure counter and move to OTP.
     $security->recordSuccess($email);
 
+    if (OTP_BYPASS) {
+        createAuthSession($user);
+        logActivity((int)$user['id'], 'Login', 'User logged in successfully (OTP bypassed).');
+        setFlash('success', 'Welcome back, ' . $user['full_name'] . '!');
+        redirect(APP_URL . '/dashboard.php');
+    }
+
     $otpService = new OtpService($pdo);
     $issued = $otpService->generate((int)$user['id']);
 

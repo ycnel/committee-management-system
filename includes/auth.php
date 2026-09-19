@@ -81,7 +81,7 @@ if (session_status() === PHP_SESSION_NONE) {
 /* ---- Single active session ---------------------------------------- */
 // A successful login from another browser replaces the token stored for
 // this user. The older session is therefore rejected on its next request.
-if (isset($_SESSION['user_id'])) {
+if (isset($_SESSION['user_id']) && !SESSION_TIMEOUT_BYPASS) {
     $sessionStmt = db()->prepare(
         'SELECT current_session_token FROM users WHERE id = :id LIMIT 1'
     );
@@ -109,7 +109,7 @@ if (isset($_SESSION['user_id'])) {
 // reaching the server, but the *expired session* response wasn't JSON.
 // AJAX requests now get a proper JSON body describing what happened.
 if (isset($_SESSION['user_id'])) {
-    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > IDLE_TIMEOUT) {
+    if (!SESSION_TIMEOUT_BYPASS && isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > IDLE_TIMEOUT) {
         destroySession();
         if (isAjaxRequest()) {
             jsonResponse(false, 'Your session has expired. Please log in again.', ['session_expired' => true]);
@@ -133,6 +133,31 @@ function destroySession(): void
     }
 
     session_destroy();
+}
+
+/**
+ * Create the real authenticated session for a user whose credentials
+ * have just been verified: rotates the session id, stores the
+ * single-session token on the users row, and populates the $_SESSION
+ * keys that requireLogin()/currentUser() read.
+ */
+function createAuthSession(array $user): void
+{
+    unset($_SESSION['pending_otp_user_id'], $_SESSION['pending_otp_email'], $_SESSION['demo_otp_code']);
+    session_regenerate_id(true);
+
+    $sessionToken = bin2hex(random_bytes(32));
+    db()->prepare('UPDATE users SET current_session_token = :token WHERE id = :id')
+        ->execute([':token' => $sessionToken, ':id' => (int)$user['id']]);
+
+    $_SESSION['user_id']          = (int)$user['id'];
+    $_SESSION['session_token']    = $sessionToken;
+    $_SESSION['full_name']        = $user['full_name'];
+    $_SESSION['email']            = $user['email'];
+    $_SESSION['role_id']          = (int)$user['role_id'];
+    $_SESSION['role_name']        = $user['role_name'];
+    $_SESSION['last_activity']    = time();
+    $_SESSION['login_started_at'] = time();
 }
 
 /* =========================================================
@@ -219,15 +244,14 @@ function isAdmin(): bool
  * management modules -- Committee Management, Workload Distribution /
  * Task Assignment, and Committee Performance snapshots.
  *
- * Under the current role model ONLY the Committee Chairperson (ROLE_STAFF)
- * manages these records. Administrator is intentionally excluded: the
- * Administrator role is view/system-administration only and must never
- * see or reach add/edit/assign/delete actions in these modules. Committee
- * Member was already excluded and remains so.
+ * Under the current role model the Administrator and the Committee
+ * Chairperson (ROLE_STAFF) manage these records — Administrator has the
+ * full operational feature set in addition to its system-administration
+ * pages. Committee Member remains excluded.
  */
 function canManage(): bool
 {
-    return hasRole([ROLE_STAFF]);
+    return hasRole([ROLE_ADMIN, ROLE_STAFF]);
 }
 
 /**

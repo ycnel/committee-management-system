@@ -95,6 +95,11 @@ define('SESSION_LIFETIME', 60 * 60 * 8); // 8-hour maximum cookie lifetime
 define('IDLE_TIMEOUT', 60 * 30); // Total inactivity timeout
 define('IDLE_WARNING_SECONDS', 10); // Show the expiry modal this many seconds before logout
 
+// TEMPORARY local-dev bypass: disables the idle-timeout logout and the
+// single-session replacement kick so dev sessions are never dropped.
+// Set to false to restore enforcement.
+define('SESSION_TIMEOUT_BYPASS', false);
+
 ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
 ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
 
@@ -108,6 +113,10 @@ define('OTP_SMTP_PASSWORD', getenv('CMAS_OTP_SMTP_PASSWORD') ?: '');
 define('OTP_SMTP_ENCRYPTION', getenv('CMAS_OTP_SMTP_ENCRYPTION') ?: 'tls');
 define('OTP_FROM_EMAIL', getenv('CMAS_OTP_FROM_EMAIL') ?: '');
 define('OTP_FROM_NAME', getenv('CMAS_OTP_FROM_NAME') ?: APP_NAME);
+
+// TEMPORARY local-dev bypass: skips the OTP step entirely after password
+// verification (no email delivery needed). Set to false to restore OTP.
+define('OTP_BYPASS', false);
 
 // ---- Pagination -------------------------------------------------------
 define('DEFAULT_PAGE_SIZE', 10);

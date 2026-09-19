@@ -30,6 +30,46 @@
   window.APP_CSRF_TOKEN = <?= json_encode(csrfToken()) ?>;
   window.IDLE_TIMEOUT = <?= (int)IDLE_TIMEOUT ?>;
   window.IDLE_WARNING_SECONDS = <?= (int)IDLE_WARNING_SECONDS ?>;
+  window.SESSION_TIMEOUT_BYPASS = <?= SESSION_TIMEOUT_BYPASS ? 'true' : 'false' ?>;
+
+  // Preview/proxy support: when this page is viewed on an origin other than
+  // APP_URL's (e.g. the IDE browser preview at http://127.0.0.1:PORT, which
+  // serves the app at its root), keep navigation and AJAX on that origin by
+  // stripping the APP_URL prefix. Does nothing when browsed directly.
+  if (window.APP_URL && location.href.indexOf(window.APP_URL) !== 0) {
+    var __appUrl = window.APP_URL;
+    var __stripAppUrl = function (u) {
+      return (typeof u === 'string' && u.indexOf(__appUrl) === 0) ? u.substring(__appUrl.length) : u;
+    };
+    window.APP_URL = '';
+
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+      if (a && a.href.indexOf(__appUrl) === 0) {
+        e.preventDefault();
+        window.location.href = a.href.substring(__appUrl.length);
+      }
+    }, true);
+
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (f && f.action && f.action.indexOf(__appUrl) === 0) {
+        f.action = f.action.substring(__appUrl.length);
+      }
+    }, true);
+
+    var __origFetch = window.fetch;
+    window.fetch = function (input, init) {
+      return __origFetch.call(this, __stripAppUrl(input), init);
+    };
+
+    var __origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function () {
+      var args = Array.prototype.slice.call(arguments);
+      args[1] = __stripAppUrl(args[1]);
+      return __origOpen.apply(this, args);
+    };
+  }
 </script>
 <script src="<?= e(APP_URL) ?>/assets/js/app.js"></script>
 
