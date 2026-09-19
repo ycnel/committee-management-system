@@ -7,6 +7,7 @@ requireLogin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(false, 'Invalid request method.');
 requireCsrf();
+session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $committeeId = (int)($_POST['committee_id'] ?? 0);
 $dateFrom = clean($_POST['date_from'] ?? '');

@@ -5,6 +5,7 @@ requireLogin();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(false, 'Invalid request method.');
 requireCsrf();
+session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $pdo = db();
 $userId = (int)currentUserId();

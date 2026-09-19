@@ -179,7 +179,7 @@ include __DIR__ . '/layouts/header.php';
               <span class="badge badge-soft-gold mt-2 ms-3">Recorded assignments</span>
             </div>
           </div>
-          <div class="d-flex gap-2 mt-3 flex-wrap">
+          <div class="overview-meta d-flex gap-2 mt-3 flex-wrap">
             <span class="badge badge-soft-neutral"><?= (int)$totals['active_members'] ?> members</span>
             <span class="badge badge-soft-neutral"><?= (int)$totals['active_jurisdictions'] ?> jurisdictions</span>
             <span class="badge badge-soft-neutral"><?= $completionRate ?>% completion rate</span>

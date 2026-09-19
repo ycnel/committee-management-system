@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]);
+session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $jurisdictionId = (int)($_GET['jurisdiction_id'] ?? 0);
 if ($jurisdictionId <= 0) {

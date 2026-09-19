@@ -808,6 +808,39 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
 .overview-card .badge-soft-neutral { color: #fff; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); }
 .overview-card .badge-soft-success, .overview-card .badge-soft-gold { color: #fff; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); }
 
+/* Overview card — compact mobile layout */
+@media (max-width: 575.98px) {
+  .overview-card .card-body { padding: 16px; }
+  .overview-card .row > [class*='col-'] { padding-left: 10px; padding-right: 10px; }
+  .overview-card .row > [class*='col-']::before { width: 1px; opacity: 0.35; }
+  .overview-card .col-6 .ps-3 { padding-left: 0 !important; }
+  .overview-card .col-6 .ms-3 { margin-left: 0 !important; }
+  .overview-card .hero-number { font-size: 30px; }
+  .overview-card .row .badge { font-size: 10px; padding: 4px 7px; white-space: normal; text-align: left; }
+  .overview-meta { display: grid !important; grid-template-columns: 1fr 1fr; gap: 6px !important; }
+  .overview-meta .badge { width: 100%; text-align: center; padding: 6px 4px; }
+}
+
+/* Performance heading — stacked mobile layout */
+@media (max-width: 575.98px) {
+  .performance-heading { flex-direction: column; align-items: stretch !important; }
+  .performance-heading h5 { font-size: 17px; }
+  .performance-heading > .d-flex.gap-2 { flex-direction: column; align-items: stretch !important; }
+  .performance-heading .btn { width: 100%; }
+  .performance-heading .performance-live-badge { justify-content: center; }
+}
+
+/* Filter forms — full-width stacked fields on mobile (committees, jurisdictions, workload, audit logs) */
+@media (max-width: 575.98px) {
+  #filterForm { flex-direction: column; align-items: stretch !important; }
+  #filterForm > div { flex: 1 1 100% !important; min-width: 0 !important; }
+  #filterForm .form-control, #filterForm .form-select { min-width: 0 !important; width: 100% !important; }
+  #filterForm .input-group { min-width: 0 !important; max-width: none !important; width: 100% !important; }
+  #filterForm > .form-control, #filterForm > .form-select, #filterForm > .btn { width: 100%; }
+  #filterForm .ms-auto { margin-left: 0 !important; width: 100%; flex-wrap: wrap; }
+  #filterForm .ms-auto .btn { flex: 1 1 30%; }
+}
+
 .btn-pill-dark {
   display: inline-flex;
   align-items: center;
@@ -828,6 +861,18 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
 .badge-soft-danger { background: rgba(235, 87, 87, 0.12); color: #c62f2f; }
 .badge-soft-gold { background: var(--ln-accent-tint); color: var(--ln-accent-ink); }
 .badge-soft-neutral { background: var(--ln-surface-2); color: var(--ln-text-muted); }
+/* Bootstrap-icons inside buttons: baseline-aligned by default (sits high).
+   Any .btn with a direct icon child becomes flex so icon + label are
+   vertically centered with consistent gap — no per-button markup needed. */
+.btn:has(> .bi) { display: inline-flex; align-items: center; gap: 6px; }
+
+.btn-soft-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: #0B2E59; background: rgba(11, 46, 89, 0.08);
+  border: 1px solid rgba(11, 46, 89, 0.18); font-weight: 600;
+}
+.btn-soft-primary:hover { background: rgba(11, 46, 89, 0.14); border-color: rgba(11, 46, 89, 0.3); color: #0B2E59; }
+
 .badge-soft-success, .badge-soft-danger, .badge-soft-gold, .badge-soft-neutral {
   font-weight: 510; font-size: 11.5px; padding: 4px 10px; border-radius: 9999px; display: inline-flex; align-items: center; gap: 4px;
 }

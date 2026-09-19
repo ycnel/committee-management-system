@@ -15,7 +15,6 @@
   let currentSort = 'full_name';
   let currentDir = 'asc';
   let currentPage = 1;
-  let searchTimer = null;
 
   function buildParams(extra) {
     const data = new FormData(filterForm);
@@ -29,7 +28,7 @@
 
   function loadTable(extra) {
     appGet(AJAX_URL + '?' + buildParams(extra || {}).toString()).then(data => {
-      if (data.success) { wrap.innerHTML = data.html; bindRowEvents(); }
+      if (data.success) { wrap.innerHTML = data.html; bindRowEvents(); if (applyDot) applyDot.classList.add('d-none'); }
       else if (!data.session_expired) { appToast('error', data.message || 'Unable to load users right now.'); }
     });
   }
@@ -60,15 +59,24 @@
 
   if (window.registerDeleteHandler) window.registerDeleteHandler(loadTable);
 
-  filterForm.addEventListener('input', function (e) {
-    if (e.target.id === 'searchInput') {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => { currentPage = 1; loadTable(); }, 400);
-    }
+  /* Apply-gated filters: edits stage locally (gold pending dot) and only
+     reload the user list on Apply / Enter; Reset clears and applies. */
+  const applyDot = document.getElementById('applyPendingDot');
+  filterForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    currentPage = 1;
+    loadTable();
   });
-  filterForm.addEventListener('change', function (e) {
-    if (e.target.id !== 'searchInput') { currentPage = 1; loadTable(); }
-  });
+  filterForm.addEventListener('input', function () { if (applyDot) applyDot.classList.remove('d-none'); });
+  filterForm.addEventListener('change', function () { if (applyDot) applyDot.classList.remove('d-none'); });
+  const resetBtn = document.getElementById('filterReset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      filterForm.reset();
+      currentPage = 1;
+      loadTable();
+    });
+  }
 
   bindRowEvents();
 

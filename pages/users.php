@@ -36,25 +36,26 @@ include __DIR__ . '/../layouts/header.php';
 
   <div class="card mb-3">
     <div class="card-body py-3">
-      <form id="filterForm" class="row g-2 align-items-center">
-        <div class="col-md-5">
-          <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search name or email...">
+      <form id="filterForm" class="d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group input-group-sm" style="max-width:260px;">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" id="searchInput" name="search" placeholder="Search name or email...">
         </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" name="role_id">
-            <option value="">All Roles</option>
-            <?php foreach ($roles as $r): ?>
-              <option value="<?= (int)$r['id'] ?>"><?= e($r['name']) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" name="status">
-            <option value="">All Statuses</option>
-            <option value="Active">Active</option>
-            <option value="Inactive">Inactive</option>
-          </select>
-        </div>
+        <select class="form-select form-select-sm" name="role_id" style="min-width:130px;width:auto;">
+          <option value="">All Roles</option>
+          <?php foreach ($roles as $r): ?>
+            <option value="<?= (int)$r['id'] ?>"><?= e($r['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <select class="form-select form-select-sm" name="status" style="min-width:120px;width:auto;">
+          <option value="">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm position-relative" id="filterApply">
+          <i class="bi bi-check2"></i> Apply<span class="apply-pending-dot d-none" id="applyPendingDot" aria-hidden="true"></span>
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="filterReset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
       </form>
     </div>
   </div>
@@ -154,6 +155,6 @@ include __DIR__ . '/../layouts/header.php';
 </div>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/users.js'];
+$extraJs = [APP_URL . '/assets/js/users.js?v=2'];
 include __DIR__ . '/../layouts/footer.php';
 ?>

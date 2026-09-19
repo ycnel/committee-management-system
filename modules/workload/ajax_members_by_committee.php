@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 requireLogin();
+session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $committeeId = (int)($_GET['committee_id'] ?? 0);
 if ($committeeId <= 0) jsonResponse(false, 'Invalid committee id.');

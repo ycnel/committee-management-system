@@ -161,30 +161,33 @@ include __DIR__ . '/../layouts/header.php';
 
   <div class="card mb-3">
     <div class="card-body py-3">
-      <form method="get" class="row g-2 align-items-center">
-        <div class="col-md-3">
-          <input type="text" class="form-control form-control-sm" name="search" value="<?= e($search) ?>" placeholder="Search activity...">
+      <form method="get" id="filterForm" class="d-flex flex-wrap align-items-center gap-2">
+        <div class="input-group input-group-sm" style="max-width:230px;">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" name="search" value="<?= e($search) ?>" placeholder="Search activity...">
         </div>
-        <div class="col-md-2"><select class="form-select form-select-sm" name="user_id">
+        <select class="form-select form-select-sm" name="user_id" style="min-width:140px;width:auto;">
           <option value="">All Users</option>
           <?php foreach ($users as $userOption): ?><option value="<?= (int)$userOption['id'] ?>" <?= $userId === (int)$userOption['id'] ? 'selected' : '' ?>><?= e($userOption['full_name']) ?></option><?php endforeach; ?>
-        </select></div>
-        <div class="col-md-2"><select class="form-select form-select-sm" name="module">
+        </select>
+        <select class="form-select form-select-sm" name="module" style="min-width:130px;width:auto;">
           <option value="">All Modules</option>
           <?php foreach (['Authentication', 'Committees', 'Jurisdictions', 'Workload', 'Users', 'Reports', 'Performance', 'System'] as $moduleOption): ?><option value="<?= e($moduleOption) ?>" <?= $module === $moduleOption ? 'selected' : '' ?>><?= e($moduleOption) ?></option><?php endforeach; ?>
-        </select></div>
-        <div class="col-md-2"><select class="form-select form-select-sm activity-filter-control" name="action">
-            <option value="">All Actions</option>
-            <?php foreach ($actionOptions as $actionOption): ?><option value="<?= e($actionOption) ?>" <?= $action === $actionOption ? 'selected' : '' ?>><?= e($actionOption) ?></option><?php endforeach; ?>
-          </select></div>
-        <div class="col-md-1"><select class="form-select form-select-sm" name="status">
+        </select>
+        <select class="form-select form-select-sm activity-filter-control" name="action" style="min-width:120px;width:auto;">
+          <option value="">All Actions</option>
+          <?php foreach ($actionOptions as $actionOption): ?><option value="<?= e($actionOption) ?>" <?= $action === $actionOption ? 'selected' : '' ?>><?= e($actionOption) ?></option><?php endforeach; ?>
+        </select>
+        <select class="form-select form-select-sm" name="status" style="min-width:105px;width:auto;">
           <option value="">Status</option><option value="Success" <?= $status === 'Success' ? 'selected' : '' ?>>Success</option><option value="Failed" <?= $status === 'Failed' ? 'selected' : '' ?>>Failed</option>
-        </select></div>
-        <div class="col-md-2"><div class="input-group input-group-sm"><input type="date" class="form-control" name="date_from" value="<?= e($dateFrom) ?>" aria-label="Date from"><input type="date" class="form-control" name="date_to" value="<?= e($dateTo) ?>" aria-label="Date to"></div></div>
-        <div class="col-md-12 d-flex justify-content-end gap-2 activity-filter-actions">
+        </select>
+        <div class="input-group input-group-sm" style="width:auto;min-width:255px;">
+          <input type="date" class="form-control" name="date_from" value="<?= e($dateFrom) ?>" aria-label="Date from"><input type="date" class="form-control" name="date_to" value="<?= e($dateTo) ?>" aria-label="Date to">
+        </div>
+        <div class="ms-auto d-flex gap-2 activity-filter-actions">
           <a href="activity_logs.php" class="btn btn-outline-secondary btn-sm activity-filter-action activity-filter-control">Reset</a>
-          <a href="activity_logs.php?<?= e(http_build_query(array_merge($_GET, ['export' => 'csv']))) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download"></i> Export CSV</a>
-          <button type="submit" class="btn btn-primary btn-sm activity-filter-action activity-filter-control"><i class="bi bi-search"></i> Apply Filters</button>
+          <a href="activity_logs.php?<?= e(http_build_query(array_merge($_GET, ['export' => 'csv']))) ?>" class="btn btn-soft-primary btn-sm"><i class="bi bi-download"></i> Export CSV</a>
+          <button type="submit" class="btn btn-primary btn-sm activity-filter-action activity-filter-control"><i class="bi bi-check2"></i> Apply</button>
         </div>
       </form>
     </div>

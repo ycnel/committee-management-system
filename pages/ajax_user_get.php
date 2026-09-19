@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 requireRole([ROLE_ADMIN]);
+session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) jsonResponse(false, 'Invalid user id.');
