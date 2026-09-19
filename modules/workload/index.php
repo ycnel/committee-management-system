@@ -332,7 +332,7 @@ if ($recCommittee > 0 && !isCommitteeMember()) {
          LEFT JOIN workload_assignments wa ON wa.committee_member_id = cm.committee_member_id
          WHERE cm.committee_id = :cid AND cm.status = 'Active'
          GROUP BY cm.committee_member_id, u.full_name, cm.member_role
-         ORDER BY active_tasks ASC"
+         ORDER BY active_assignments ASC"
     );
     $recStmt->execute([':cid' => $recCommittee]);
     $recommendations = $recStmt->fetchAll();
