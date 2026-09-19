@@ -52,6 +52,10 @@ $menuItems = [
 ?>
 
 <aside class="sidebar" id="sidebar">
+  <!-- Mobile close (drawer sits above the topnav, so it needs its own X) -->
+  <button type="button" class="sidebar-close" id="sidebarClose" aria-label="Close menu">
+    <i class="bi bi-x-lg"></i>
+  </button>
   <!-- Brand Header -->
   <div class="sidebar-header">
     <div class="brand-icon-wrapper">
@@ -356,6 +360,19 @@ $menuItems = [
 
 .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; backdrop-filter: blur(2px); }
 .sidebar-overlay.active { display: block; }
+
+.sidebar-close { display: none; }
+@media (max-width: 991.98px) {
+  .sidebar-close {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 16px; right: 12px; z-index: 2;
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--sb-border); background: transparent;
+    color: var(--sb-text-muted); font-size: 15px; cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+  .sidebar-close:hover { color: var(--sb-text-heading); background: var(--sb-surface-2); }
+}
 </style>
 
 <script>
@@ -456,6 +473,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (icon) icon.className = 'bi bi-list';
         }
     }
+
+    const closeBtn = document.getElementById('sidebarClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeMobileDrawer);
 
     if (overlay) {
         overlay.addEventListener('click', function() {
