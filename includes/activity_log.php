@@ -17,6 +17,24 @@ require_once __DIR__ . '/../config/database.php';
  * @param string   $action  Short action label, e.g. 'Login', 'Insert Hearing', 'Delete Issue'
  * @param string   $details Optional free-text details
  */
+/**
+ * Real client IP — behind a reverse proxy REMOTE_ADDR is the proxy's
+ * loopback; X-Forwarded-For carries the client chain (leftmost = original).
+ */
+function clientIp(): ?string
+{
+    $xff = (string)($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    if ($xff !== '') {
+        foreach (explode(',', $xff) as $candidate) {
+            $ip = trim($candidate);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
+            }
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? null;
+}
+
 function logActivity(?int $userId, string $action, string $details = ''): ?int
 {
     try {
@@ -29,7 +47,7 @@ function logActivity(?int $userId, string $action, string $details = ''): ?int
             ':user_id' => $userId,
             ':action'  => $action,
             ':details' => $details,
-            ':ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            ':ip_address' => clientIp(),
             ':user_agent' => isset($_SERVER['HTTP_USER_AGENT'])
                 ? substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 500)
                 : null,
