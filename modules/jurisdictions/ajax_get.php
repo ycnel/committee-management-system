@@ -12,4 +12,15 @@ $jurisdiction = $stmt->fetch();
 
 if (!$jurisdiction) jsonResponse(false, 'Jurisdiction not found.');
 
-jsonResponse(true, '', ['jurisdiction' => $jurisdiction]);
+$committeeStmt = $pdo->prepare(
+    'SELECT committee_id, committee_name, status
+     FROM committees
+     WHERE jurisdiction_id = :id
+     ORDER BY committee_name'
+);
+$committeeStmt->execute([':id' => $id]);
+
+jsonResponse(true, '', [
+    'jurisdiction' => $jurisdiction,
+    'committees'   => $committeeStmt->fetchAll(),
+]);

@@ -9,8 +9,9 @@
 
 $pdo = db();
 
-$search    = clean($_GET['search'] ?? '');
-$statusFil = clean($_GET['status'] ?? '');
+$search       = clean($_GET['search'] ?? '');
+$statusFil    = clean($_GET['status'] ?? '');
+$committeesFil = clean($_GET['committees'] ?? '');
 
 $sortableColumns = ['jurisdiction_name', 'category', 'status', 'committee_count'];
 $sortBy  = in_array($_GET['sort'] ?? '', $sortableColumns, true) ? $_GET['sort'] : 'jurisdiction_name';
@@ -23,6 +24,9 @@ if ($search !== '') {
   $params[':s1'] = $params[':s2'] = $params[':s3'] = $params[':s4'] = $params[':s5'] = '%' . $search . '%';
 }
 if ($statusFil !== '') { $where[] = 'j.status = :status'; $params[':status'] = $statusFil; }
+$committeeCountSql = '(SELECT COUNT(*) FROM committees c WHERE c.jurisdiction_id = j.jurisdiction_id)';
+if ($committeesFil === 'some') { $where[] = "$committeeCountSql > 0"; }
+elseif ($committeesFil === 'none') { $where[] = "$committeeCountSql = 0"; }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM jurisdictions j $whereSql");
@@ -39,14 +43,6 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 ?>
-<div class="committee-list-toolbar jurisdiction-list-toolbar">
-  <span class="small text-muted">Sort jurisdictions by:</span>
-  <a href="#" class="sort-link" data-sort="jurisdiction_name">Name <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="category">Category <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="committee_count">Committees <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="status">Status <i class="bi bi-arrow-down-up sort-icon"></i></a>
-</div>
-
 <?php if (empty($rows)): ?>
   <div class="jurisdiction-empty-state text-center text-muted py-5">No jurisdictions found.</div>
 <?php else: ?>
@@ -65,7 +61,7 @@ $rows = $stmt->fetchAll();
           <div class="jurisdiction-card-footer">
             <span class="jurisdiction-card-status status-<?= e(strtolower($r['status'])) ?>"><?= e($r['status']) ?></span>
             <div class="jurisdiction-actions">
-              <a class="jurisdiction-action-button" href="view.php?id=<?= (int)$r['jurisdiction_id'] ?>" title="View jurisdiction details">
+              <a class="jurisdiction-action-button btn-view-jurisdiction" href="view.php?id=<?= (int)$r['jurisdiction_id'] ?>" data-id="<?= (int)$r['jurisdiction_id'] ?>" title="View jurisdiction details">
                 <i class="bi bi-eye"></i>
               </a>
               <button type="button" class="jurisdiction-action-button btn-edit-jurisdiction" data-id="<?= (int)$r['jurisdiction_id'] ?>" title="Edit jurisdiction">

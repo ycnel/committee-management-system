@@ -12,40 +12,36 @@
   if (!wrap || !filterForm) return;
 
   const AJAX_URL = window.APP_URL + '/modules/jurisdictions/ajax_search.php';
-  let currentSort = 'jurisdiction_name';
-  let currentDir = 'asc';
   let currentPage = 1;
-  let searchTimer = null;
 
   function buildParams(extra) {
     const data = new FormData(filterForm);
     const params = new URLSearchParams();
     for (const [key, val] of data.entries()) { if (val !== '') params.append(key, val); }
-    params.set('sort', currentSort);
-    params.set('dir', currentDir);
     params.set('page', extra && extra.page ? extra.page : currentPage);
     return params;
   }
 
+  function updateFilterChip() {
+    const chip = document.getElementById('activeFilterCount');
+    if (!chip) return;
+    const ignored = new Set(['sort', 'dir']);
+    let n = 0;
+    for (const [key, val] of new FormData(filterForm).entries()) {
+      if (!ignored.has(key) && val !== '') n++;
+    }
+    chip.textContent = n + ' filter' + (n === 1 ? '' : 's') + ' active';
+    chip.classList.toggle('d-none', n === 0);
+  }
+
   function loadTable(extra) {
     appGet(AJAX_URL + '?' + buildParams(extra || {}).toString()).then(data => {
-      if (data.success) { wrap.innerHTML = data.html; bindRowEvents(); }
+      if (data.success) { wrap.innerHTML = data.html; bindRowEvents(); updateFilterChip(); if (applyDot) applyDot.classList.add('d-none'); }
       else if (!data.session_expired) { appToast('error', data.message || 'Unable to load jurisdictions right now.'); }
     });
   }
 
   function bindRowEvents() {
-    wrap.querySelectorAll('.sort-link').forEach(el => {
-      el.style.cursor = 'pointer';
-      el.addEventListener('click', function (e) {
-        e.preventDefault();
-        const col = el.getAttribute('data-sort');
-        currentDir = (currentSort === col && currentDir === 'asc') ? 'desc' : 'asc';
-        currentSort = col;
-        currentPage = 1;
-        loadTable();
-      });
-    });
     wrap.querySelectorAll('.pagination a.page-link').forEach(a => {
       a.addEventListener('click', function (e) {
         e.preventDefault();
@@ -58,17 +54,123 @@
     });
   }
 
+  /* ---- Read-only details modal (delegated: survives AJAX reloads) ---- */
+  const viewModalEl = document.getElementById('jurisdictionViewModal');
+  if (viewModalEl && window.bootstrap) {
+    const viewModal = new bootstrap.Modal(viewModalEl);
+    const text = function (id, value) {
+      const el = document.getElementById(id);
+      el.textContent = (value && String(value).trim() !== '') ? value : 'Not provided.';
+      el.classList.toggle('text-muted', !(value && String(value).trim() !== ''));
+    };
+
+    wrap.addEventListener('click', function (e) {
+      const link = e.target.closest('.btn-view-jurisdiction');
+      if (!link) return;
+      e.preventDefault();
+
+      fetch(window.APP_URL + '/modules/jurisdictions/ajax_get.php?id=' + encodeURIComponent(link.getAttribute('data-id')), {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }, cache: 'no-store'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.success) { appToast('error', data.message || 'Unable to load jurisdiction.'); return; }
+          const j = data.jurisdiction;
+          const statusBadge = function (s) { return 'bg-' + (s === 'Active' ? 'success' : (s === 'Dissolved' ? 'danger' : 'secondary')); };
+
+          document.getElementById('jvName').textContent = j.jurisdiction_name;
+          document.getElementById('jvNameDl').textContent = j.jurisdiction_name;
+          const status = document.getElementById('jvStatus');
+          status.textContent = j.status;
+          status.className = 'badge ms-1 ' + statusBadge(j.status);
+          const statusDl = document.getElementById('jvStatusDl');
+          statusDl.innerHTML = '';
+          const dlBadge = document.createElement('span');
+          dlBadge.className = 'badge ' + statusBadge(j.status);
+          dlBadge.textContent = j.status;
+          statusDl.appendChild(dlBadge);
+          document.getElementById('jvCount').textContent = data.committees.length;
+          document.getElementById('jvCountBadge').textContent = data.committees.length;
+          text('jvCategory', j.category);
+          text('jvDescription', j.description);
+          text('jvScope', j.scope_definition);
+          text('jvCovered', j.covered_areas);
+          text('jvResp', j.primary_responsibilities);
+          text('jvMatters', j.typical_legislative_matters);
+          text('jvOutside', j.outside_scope);
+
+          const notesWrap = document.getElementById('jvNotesWrap');
+          if (j.notes && j.notes.trim() !== '') {
+            notesWrap.classList.remove('d-none');
+            text('jvNotes', j.notes);
+          } else {
+            notesWrap.classList.add('d-none');
+          }
+
+          const tbody = document.getElementById('jvCommitteesBody');
+          const empty = document.getElementById('jvCommitteesEmpty');
+          const tableWrap = document.getElementById('jvCommitteesTableWrap');
+          tbody.innerHTML = '';
+          if (!data.committees.length) {
+            empty.classList.remove('d-none');
+            tableWrap.classList.add('d-none');
+          } else {
+            empty.classList.add('d-none');
+            tableWrap.classList.remove('d-none');
+            data.committees.forEach(function (c) {
+              const tr = document.createElement('tr');
+              const tdName = document.createElement('td');
+              tdName.textContent = c.committee_name;
+              const tdStatus = document.createElement('td');
+              const badge = document.createElement('span');
+              badge.className = 'badge ' + statusBadge(c.status);
+              badge.textContent = c.status;
+              tdStatus.appendChild(badge);
+              const tdActions = document.createElement('td');
+              tdActions.className = 'text-end';
+              const view = document.createElement('a');
+              view.className = 'btn btn-outline-secondary btn-sm';
+              view.href = window.APP_URL + '/modules/committees/view.php?id=' + encodeURIComponent(c.committee_id);
+              view.title = 'View committee';
+              const icon = document.createElement('i');
+              icon.className = 'bi bi-eye';
+              view.appendChild(icon);
+              tdActions.appendChild(view);
+              tr.appendChild(tdName);
+              tr.appendChild(tdStatus);
+              tr.appendChild(tdActions);
+              tbody.appendChild(tr);
+            });
+          }
+          document.getElementById('jvFullView').href = 'view.php?id=' + encodeURIComponent(j.jurisdiction_id);
+          viewModal.show();
+        })
+        .catch(function () { appToast('error', 'Unable to load jurisdiction right now.'); });
+    });
+  }
+
   if (window.registerDeleteHandler) window.registerDeleteHandler(loadTable);
 
-  filterForm.addEventListener('input', function (e) {
-    if (e.target.id === 'searchInput') {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => { currentPage = 1; loadTable(); }, 400);
-    }
+  /* Filters are Apply-gated: any edit just marks the Apply button pending;
+     the table reloads on submit (Apply click or Enter in any field). */
+  const applyDot = document.getElementById('applyPendingDot');
+  function markPending() { if (applyDot) applyDot.classList.remove('d-none'); }
+  filterForm.addEventListener('input', markPending);
+  filterForm.addEventListener('change', markPending);
+  filterForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    currentPage = 1;
+    loadTable();
   });
-  filterForm.addEventListener('change', function (e) {
-    if (e.target.id !== 'searchInput') { currentPage = 1; loadTable(); }
-  });
+
+  const resetBtn = document.getElementById('filterReset');
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      filterForm.reset();
+      currentPage = 1;
+      loadTable();
+    });
+  }
 
   bindRowEvents();
 
