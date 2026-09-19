@@ -62,7 +62,7 @@ include __DIR__ . '/../../layouts/header.php';
   </div>
 
 <div class="modal fade" id="jurisdictionModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <form id="jurisdictionForm">
         <?= csrfField() ?>
@@ -75,9 +75,9 @@ include __DIR__ . '/../../layouts/header.php';
           <div class="jurisdiction-stepper" aria-label="Jurisdiction setup progress">
             <div class="jurisdiction-stepper-step is-active" data-jurisdiction-step-indicator="1"><span>1</span><div><strong>Identity</strong><small>Name</small></div></div>
             <div class="jurisdiction-stepper-line"></div>
-            <div class="jurisdiction-stepper-step" data-jurisdiction-step-indicator="2"><span>2</span><div><strong>Scope</strong><small>Category and description</small></div></div>
+            <div class="jurisdiction-stepper-step" data-jurisdiction-step-indicator="2"><span>2</span><div><strong>Scope</strong><small>Definition and subjects</small></div></div>
             <div class="jurisdiction-stepper-line"></div>
-            <div class="jurisdiction-stepper-step" data-jurisdiction-step-indicator="3"><span>3</span><div><strong>Status</strong><small>Activation</small></div></div>
+            <div class="jurisdiction-stepper-step" data-jurisdiction-step-indicator="3"><span>3</span><div><strong>Review</strong><small>Status and notes</small></div></div>
           </div>
 
           <section class="jurisdiction-step-panel is-active" data-jurisdiction-step-panel="1">
@@ -87,18 +87,26 @@ include __DIR__ . '/../../layouts/header.php';
           </section>
 
           <section class="jurisdiction-step-panel" data-jurisdiction-step-panel="2">
-            <div class="jurisdiction-step-heading"><span>Step 2</span><h6>Define the scope</h6><p>Add a category and describe the jurisdiction's responsibilities.</p></div>
+            <div class="jurisdiction-step-heading"><span>Step 2</span><h6>Define the scope</h6><p>Explain what this jurisdiction covers and the matters it normally handles.</p></div>
             <div class="mb-3"><label class="form-label">Category</label><input type="text" name="category" id="jd_category" class="form-control" maxlength="100" placeholder="e.g. Finance, Public Safety"></div>
-            <div><label class="form-label">Description</label><textarea name="description" id="jd_description" class="form-control" rows="4" placeholder="Describe the jurisdiction's scope and responsibilities."></textarea></div>
+            <div class="mb-3"><label class="form-label">Description</label><textarea name="description" id="jd_description" class="form-control" rows="3" placeholder="Briefly describe this jurisdiction."></textarea></div>
+            <div class="mb-3"><label class="form-label">Scope Definition</label><textarea name="scope_definition" id="jd_scope_definition" class="form-control" rows="4" placeholder="Explain what matters and subjects are covered."></textarea></div>
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label">Covered Areas / Subjects</label><textarea name="covered_areas" id="jd_covered_areas" class="form-control" rows="4" placeholder="List covered subjects, one per line."></textarea></div>
+              <div class="col-md-6"><label class="form-label">Primary Responsibilities</label><textarea name="primary_responsibilities" id="jd_primary_responsibilities" class="form-control" rows="4" placeholder="List primary responsibilities, one per line."></textarea></div>
+              <div class="col-md-6"><label class="form-label">Typical Legislative Matters</label><textarea name="typical_legislative_matters" id="jd_typical_legislative_matters" class="form-control" rows="4" placeholder="List typical matters, one per line."></textarea></div>
+              <div class="col-md-6"><label class="form-label">Outside Scope</label><textarea name="outside_scope" id="jd_outside_scope" class="form-control" rows="4" placeholder="Describe matters outside this jurisdiction."></textarea></div>
+            </div>
           </section>
 
           <section class="jurisdiction-step-panel" data-jurisdiction-step-panel="3">
-            <div class="jurisdiction-step-heading"><span>Step 3</span><h6>Set the status</h6><p>Choose whether this jurisdiction is currently available.</p></div>
+            <div class="jurisdiction-step-heading"><span>Step 3</span><h6>Review and save</h6><p>Set availability and add any additional notes.</p></div>
             <label class="form-label">Status</label>
             <select name="status" id="jd_status" class="form-select">
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
+            <div class="mt-3"><label class="form-label">Notes</label><textarea name="notes" id="jd_notes" class="form-control" rows="4" placeholder="Add internal notes or clarifications."></textarea></div>
           </section>
         </div>
         <div class="modal-footer">

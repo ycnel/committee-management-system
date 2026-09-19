@@ -24,7 +24,8 @@ document.addEventListener('DOMContentLoaded', function () {
   function expireForInactivity() {
     if (idleExpiryShown) return;
     idleExpiryShown = true;
-    const message = 'You have been inactive for 5 minutes. Please log in again.';
+    const idleMinutes = Math.ceil(idleTimeout / 60000);
+    const message = 'You have been inactive for ' + idleMinutes + ' minutes. Please log in again.';
     if (window.Swal) {
       Swal.fire({
         icon: 'warning',

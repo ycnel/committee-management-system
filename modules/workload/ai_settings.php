@@ -13,7 +13,6 @@
 
 
 require_once __DIR__ . '/../../includes/auth.php';
-require_once __DIR__ . '/../../includes/WorkloadAI.php';
 require_once __DIR__ . '/../../includes/GeminiAI.php';
 requireRole([ROLE_ADMIN]);
 
@@ -21,7 +20,7 @@ $pageTitle  = 'Smart AI Workload Settings';
 $activeMenu = 'workload';
 $pdo = db();
 
-$factors = $pdo->query('SELECT * FROM ai_weight_config ORDER BY weight DESC')->fetchAll();
+$factors = [];
 
 $gemini = new GeminiAI($pdo);
 $geminiConfig = $gemini->getConfig();

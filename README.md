@@ -27,7 +27,11 @@ stack and coding conventions throughout.
    ```
    mysql -u root -p committee_management_db < database/migration_auth_security.sql
    ```
-5. Configure the application base URL. For production, set the
+5. Import recipient-scoped notifications (required for existing databases):
+   ```
+   mysql -u root -p committee_management_db < database/migration_notifications.sql
+   ```
+6. Configure the application base URL. For production, set the
    `CMAS_APP_URL` environment variable to your HTTPS domain. For local
    XAMPP, leave it unset and the application will use the current local URL.
    ```php
@@ -105,6 +109,9 @@ operational/management role for committees and workload:
 If you're updating an existing installation (not a fresh `schema.sql` run),
 apply `database/migration_role_rename.sql` once to rename the stored
 "Legislative Staff" role to "Committee Chairperson".
+
+Existing installations must also apply `database/migration_notifications.sql`
+once so the notification bell can store and filter recipient-specific records.
 
 ## 5. Notes
 

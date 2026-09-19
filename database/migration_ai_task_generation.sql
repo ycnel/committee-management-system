@@ -16,5 +16,7 @@ ALTER TABLE ai_recommendations
 
 -- Note: candidates_json now stores {"task_title": "...", "members": [...]}
 -- for this workflow instead of the old rule-based ranked-candidate payload.
--- ai_generated_fields stores {"description","priority","workload_points","due_date","status"}
--- exactly as validated/corrected by OllamaAI before being shown to the admin.
+-- ai_generated_fields stores the validated task fields plus recommendation
+-- support indicators: expertise_match, experience_match, workload_factor,
+-- committee_relevance, and overall_relevance. These are not performance
+-- scores and are shown only as decision-support context for the admin.

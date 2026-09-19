@@ -74,6 +74,35 @@ INSERT IGNORE INTO users (id, full_name, email, password, role_id, status) VALUE
      '$2y$10$eDWSrr687sOeMoBVuxHpj.0iAUP3G5Hdjonl1gPKmA2quRe5Reyz2', 3, 'Active');
 
 -- ---------------------------------------------------------
+-- USER BACKGROUND (optional profile data for members and staff)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_background (
+    id                      INT AUTO_INCREMENT PRIMARY KEY,
+    user_id                 INT NOT NULL,
+    highest_education       VARCHAR(150) DEFAULT NULL,
+    degree_course           VARCHAR(255) DEFAULT NULL,
+    school_university       VARCHAR(255) DEFAULT NULL,
+    major_specialization    VARCHAR(255) DEFAULT NULL,
+    certifications_training TEXT DEFAULT NULL,
+    current_profession      VARCHAR(255) DEFAULT NULL,
+    years_experience        SMALLINT UNSIGNED DEFAULT NULL,
+    previous_positions      TEXT DEFAULT NULL,
+    previous_organizations  TEXT DEFAULT NULL,
+    government_experience   TEXT DEFAULT NULL,
+    primary_expertise       VARCHAR(255) DEFAULT NULL,
+    secondary_expertise     TEXT DEFAULT NULL,
+    knowledge_areas         TEXT DEFAULT NULL,
+    relevant_skills         TEXT DEFAULT NULL,
+    committee_expertise     TEXT DEFAULT NULL,
+    expertise_keywords      TEXT DEFAULT NULL,
+    created_at              DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user_background_user (user_id),
+    CONSTRAINT fk_user_background_user FOREIGN KEY (user_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
 -- ACTIVITY LOGS
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS activity_logs (
@@ -91,6 +120,26 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------
+-- NOTIFICATIONS
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id    INT AUTO_INCREMENT PRIMARY KEY,
+    recipient_user_id  INT NOT NULL,
+    activity_log_id    INT DEFAULT NULL,
+    message            VARCHAR(500) NOT NULL,
+    url                VARCHAR(500) DEFAULT NULL,
+    read_at            DATETIME DEFAULT NULL,
+    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_notification_activity_recipient (activity_log_id, recipient_user_id),
+    KEY idx_notifications_recipient (recipient_user_id, read_at, created_at),
+    CONSTRAINT fk_notification_recipient FOREIGN KEY (recipient_user_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_notification_activity FOREIGN KEY (activity_log_id)
+        REFERENCES activity_logs(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
 -- JURISDICTIONS  (Module 3: Jurisdiction and Scope)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS jurisdictions (
@@ -98,6 +147,12 @@ CREATE TABLE IF NOT EXISTS jurisdictions (
     jurisdiction_name VARCHAR(150) NOT NULL,
     category           VARCHAR(100) DEFAULT NULL,
     description         TEXT,
+    scope_definition   TEXT DEFAULT NULL,
+    covered_areas      TEXT DEFAULT NULL,
+    primary_responsibilities TEXT DEFAULT NULL,
+    typical_legislative_matters TEXT DEFAULT NULL,
+    outside_scope     TEXT DEFAULT NULL,
+    notes             TEXT DEFAULT NULL,
     status             ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
     created_by         INT DEFAULT NULL,
     created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -164,6 +219,8 @@ CREATE TABLE IF NOT EXISTS workload_assignments (
     status                 ENUM('Pending','In Progress','Completed','Overdue') NOT NULL DEFAULT 'Pending',
     created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
 
+    UNIQUE KEY uq_workload_member_task_due (committee_member_id, task_title, due_date),
+
     CONSTRAINT fk_wl_member FOREIGN KEY (committee_member_id)
         REFERENCES committee_members(committee_member_id) ON UPDATE CASCADE ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -182,6 +239,8 @@ CREATE TABLE IF NOT EXISTS committee_performance (
     completion_rate     DECIMAL(5,2) NOT NULL DEFAULT 0.00,
     remarks             TEXT,
     generated_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_committee_performance_period (committee_id, evaluation_period),
 
     CONSTRAINT fk_perf_committee FOREIGN KEY (committee_id)
         REFERENCES committees(committee_id) ON UPDATE CASCADE ON DELETE CASCADE

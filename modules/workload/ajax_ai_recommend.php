@@ -13,7 +13,7 @@
  * New flow:
  *   1. Require committee_id + task_title (AI needs a title to work from).
  *   2. Pull the committee's ACTUAL active members and their real,
- *      current workload metrics straight from the database.
+ *      current assignment metrics straight from the database.
  *   3. Send title + real data to the Gemini service.
  *   4. Validate everything the AI returns (already done inside
  *      OllamaAI, but the member id is re-checked here too as a
@@ -31,6 +31,10 @@ if (!canManage()) jsonResponse(false, 'You do not have permission to perform thi
 
 $committeeId = (int)($_GET['committee_id'] ?? 0);
 $taskTitle    = trim((string)($_GET['task_title'] ?? ''));
+$taskContext  = [
+    'description' => trim((string)($_GET['task_description'] ?? '')),
+    'priority' => trim((string)($_GET['priority'] ?? '')),
+];
 
 if ($committeeId <= 0) jsonResponse(false, 'Invalid committee id.');
 if ($taskTitle === '') jsonResponse(false, 'Please enter a task title first, then click Generate with AI.');
@@ -38,73 +42,35 @@ if (mb_strlen($taskTitle) > 255) jsonResponse(false, 'Task title is too long.');
 
 $pdo = db();
 
-$chk = $pdo->prepare('SELECT committee_name FROM committees WHERE committee_id = :id');
+$chk = $pdo->prepare(
+    'SELECT c.committee_name, j.jurisdiction_name, j.category
+     FROM committees c
+     LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
+     WHERE c.committee_id = :id'
+);
 $chk->execute([':id' => $committeeId]);
 $committee = $chk->fetch();
 if (!$committee) jsonResponse(false, 'Committee not found.');
 
 /**
  * ---- Gather ACTUAL committee/member/workload data directly ----
- * Mirrors the same real metrics WorkloadAI computes internally, but
- * queried here independently so this workflow has no dependency on
- * WorkloadAI's rule-based scoring/ranking logic.
+ * Gathers factual assignment indicators directly so this workflow has
+ * no dependency on arbitrary workload-point scoring.
  */
-function cmas_ai_current_workload(PDO $pdo, int $committeeMemberId): float
+function cmas_ai_active_assignments(PDO $pdo, int $committeeMemberId): int
 {
     $stmt = $pdo->prepare(
-        "SELECT COALESCE(SUM(workload_points), 0) FROM workload_assignments
-         WHERE committee_member_id = :id AND status IN ('Pending','In Progress')"
+        "SELECT COUNT(*) FROM workload_assignments
+         WHERE committee_member_id = :id"
     );
     $stmt->execute([':id' => $committeeMemberId]);
-    return (float)$stmt->fetchColumn();
+    return (int)$stmt->fetchColumn();
 }
 
 function cmas_ai_active_committee_count(PDO $pdo, int $userId): float
 {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM committee_members WHERE user_id = :uid AND status = 'Active'");
     $stmt->execute([':uid' => $userId]);
-    return (float)$stmt->fetchColumn();
-}
-
-function cmas_ai_completion_rate(PDO $pdo, int $userId): float
-{
-    $stmt = $pdo->prepare(
-        "SELECT COUNT(wa.workload_id) AS total, SUM(CASE WHEN wa.status = 'Completed' THEN 1 ELSE 0 END) AS completed
-         FROM workload_assignments wa
-         INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
-         WHERE cm.user_id = :uid"
-    );
-    $stmt->execute([':uid' => $userId]);
-    $row = $stmt->fetch();
-    $total = (int)($row['total'] ?? 0);
-    if ($total === 0) return 50.0; // neutral, no history yet
-    return round(((int)$row['completed'] / $total) * 100, 1);
-}
-
-function cmas_ai_timeliness(PDO $pdo, int $userId): float
-{
-    $stmt = $pdo->prepare(
-        "SELECT COUNT(*) AS total_completed,
-                SUM(CASE WHEN wa.completion_date <= wa.due_date OR wa.due_date IS NULL THEN 1 ELSE 0 END) AS on_time
-         FROM workload_assignments wa
-         INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
-         WHERE cm.user_id = :uid AND wa.status = 'Completed'"
-    );
-    $stmt->execute([':uid' => $userId]);
-    $row = $stmt->fetch();
-    $total = (int)($row['total_completed'] ?? 0);
-    if ($total === 0) return 50.0;
-    return round(((int)$row['on_time'] / $total) * 100, 1);
-}
-
-function cmas_ai_overdue_count(PDO $pdo, int $committeeMemberId): float
-{
-    $stmt = $pdo->prepare(
-        "SELECT COUNT(*) FROM workload_assignments
-         WHERE committee_member_id = :id AND status != 'Completed'
-           AND due_date IS NOT NULL AND due_date < CURDATE()"
-    );
-    $stmt->execute([':id' => $committeeMemberId]);
     return (float)$stmt->fetchColumn();
 }
 
@@ -117,11 +83,36 @@ function cmas_ai_assignment_recency_days(PDO $pdo, int $committeeMemberId): floa
     return (float)((new DateTime())->diff(new DateTime($last))->days);
 }
 
+function cmas_ai_previous_assignments(PDO $pdo, int $committeeMemberId): array
+{
+    $stmt = $pdo->prepare(
+        "SELECT task_title, priority, due_date
+         FROM workload_assignments
+         WHERE committee_member_id = :id
+         ORDER BY created_at DESC LIMIT 8"
+    );
+    $stmt->execute([':id' => $committeeMemberId]);
+    return array_map(static function (array $task): array {
+        return [
+            'title' => (string)$task['task_title'],
+            'priority' => (string)$task['priority'],
+            'due_date' => $task['due_date'],
+        ];
+    }, $stmt->fetchAll());
+}
+
 try {
     $memberStmt = $pdo->prepare(
-        "SELECT cm.committee_member_id, cm.member_role, cm.user_id, u.full_name
+        "SELECT cm.committee_member_id, cm.member_role, cm.user_id, u.full_name,
+            ub.highest_education, ub.degree_course, ub.school_university,
+            ub.major_specialization, ub.certifications_training,
+            ub.current_profession, ub.years_experience, ub.previous_positions,
+            ub.previous_organizations, ub.government_experience,
+            ub.primary_expertise, ub.secondary_expertise, ub.knowledge_areas,
+            ub.relevant_skills, ub.committee_expertise, ub.expertise_keywords
          FROM committee_members cm
          INNER JOIN users u ON u.id = cm.user_id
+         LEFT JOIN user_background ub ON ub.user_id = u.id
          WHERE cm.committee_id = :cid AND cm.status = 'Active'"
     );
     $memberStmt->execute([':cid' => $committeeId]);
@@ -139,17 +130,36 @@ try {
             'member_id' => $cmId,
             'name' => $m['full_name'],
             'role' => $m['member_role'],
-            'current_workload' => cmas_ai_current_workload($pdo, $cmId),
+            'active_assignments' => cmas_ai_active_assignments($pdo, $cmId),
             'active_committees' => cmas_ai_active_committee_count($pdo, $userId),
-            'completion_rate' => cmas_ai_completion_rate($pdo, $userId),
-            'on_time_rate' => cmas_ai_timeliness($pdo, $userId),
-            'overdue_tasks' => cmas_ai_overdue_count($pdo, $cmId),
             'days_since_last_assignment' => cmas_ai_assignment_recency_days($pdo, $cmId),
+            'background' => [
+                'highest_education' => $m['highest_education'],
+                'degree_course' => $m['degree_course'],
+                'school_university' => $m['school_university'],
+                'major_specialization' => $m['major_specialization'],
+                'certifications_training' => $m['certifications_training'],
+                'current_profession' => $m['current_profession'],
+                'years_experience' => $m['years_experience'] === null ? null : (int)$m['years_experience'],
+                'previous_positions' => $m['previous_positions'],
+                'previous_organizations' => $m['previous_organizations'],
+                'government_experience' => $m['government_experience'],
+                'primary_expertise' => $m['primary_expertise'],
+                'secondary_expertise' => $m['secondary_expertise'],
+                'knowledge_areas' => $m['knowledge_areas'],
+                'relevant_skills' => $m['relevant_skills'],
+                'committee_expertise' => $m['committee_expertise'],
+                'expertise_keywords' => $m['expertise_keywords'],
+            ],
+            'previous_assignments' => cmas_ai_previous_assignments($pdo, $cmId),
         ];
     }
 
     $validIds = array_column($members, 'member_id');
-    $candidatesHash = hash('sha256', $taskTitle . '|' . $committeeId . '|' . json_encode($members));
+    // Version the recommendation policy so cached results created under an
+    // older priority order cannot bypass the profile-first logic.
+    $recommendationPolicyVersion = 'profile-first-v1';
+    $candidatesHash = hash('sha256', json_encode([$recommendationPolicyVersion, $taskTitle, $taskContext, $committeeId, $members], JSON_UNESCAPED_UNICODE));
 
     // ---- Reuse a very recent identical request (title unchanged, data unchanged) ----
     $cacheMinutes = defined('GEMINI_CACHE_MINUTES') ? GEMINI_CACHE_MINUTES : 10;
@@ -177,7 +187,15 @@ try {
         ], $fields);
     } else {
         $gemini = new GeminiAI($pdo);
-        $aiResult = $gemini->generateTaskRecommendation($taskTitle, $committee['committee_name'], $members);
+        $aiResult = $gemini->generateTaskRecommendation(
+            $taskTitle,
+            $committee['committee_name'],
+            $members,
+            array_merge($taskContext, [
+                'jurisdiction' => $committee['jurisdiction_name'],
+                'jurisdiction_category' => $committee['category'],
+            ])
+        );
         $aiResult['from_cache'] = false;
 
         // Independent second guard: never let an invented member id through,
@@ -192,9 +210,12 @@ try {
     $generatedFields = [
         'description' => $aiResult['description'] ?? null,
         'priority' => $aiResult['priority'] ?? null,
-        'workload_points' => $aiResult['workload_points'] ?? null,
         'due_date' => $aiResult['due_date'] ?? null,
-        'status' => $aiResult['status'] ?? null,
+        'expertise_match' => $aiResult['expertise_match'] ?? null,
+        'experience_match' => $aiResult['experience_match'] ?? null,
+        'workload_factor' => $aiResult['workload_factor'] ?? null,
+        'committee_relevance' => $aiResult['committee_relevance'] ?? null,
+        'overall_relevance' => $aiResult['overall_relevance'] ?? null,
     ];
 
     $insertStmt = $pdo->prepare(

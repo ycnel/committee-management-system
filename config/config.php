@@ -25,16 +25,21 @@ define('APP_SHORT_NAME', 'CMAS');
 // When unset, derive the URL from the current request so local XAMPP and
 // hosted deployments both keep their own scheme and hostname.
 $configuredAppUrl = trim((string)getenv('CMAS_APP_URL'));
-if ($configuredAppUrl === '') {
-    $forwardedProto = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0] ?? ''));
-    $scheme = $forwardedProto === 'https' || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-        ? 'https'
-        : 'http';
-    $requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
-    $isLocalHost = $requestHost === 'localhost'
-        || str_starts_with($requestHost, 'localhost:')
-        || $requestHost === '127.0.0.1'
-        || str_starts_with($requestHost, '127.0.0.1:');
+$forwardedProto = strtolower(trim(explode(',', (string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0] ?? ''));
+$scheme = $forwardedProto === 'https' || (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    ? 'https'
+    : 'http';
+$requestHost = trim((string)($_SERVER['HTTP_HOST'] ?? ''));
+$isLocalHost = $requestHost === 'localhost'
+    || str_starts_with($requestHost, 'localhost:')
+    || $requestHost === '127.0.0.1'
+    || str_starts_with($requestHost, '127.0.0.1:');
+$configuredHost = strtolower((string)(parse_url($configuredAppUrl, PHP_URL_HOST) ?? ''));
+$configuredIsLocal = $configuredHost === 'localhost'
+    || $configuredHost === '127.0.0.1'
+    || $configuredHost === '::1';
+
+if ($configuredAppUrl === '' || ($configuredIsLocal && !$isLocalHost)) {
     $configuredAppUrl = $requestHost !== '' && !$isLocalHost
         ? $scheme . '://' . $requestHost
         : 'http://localhost/committee-management-system';
@@ -52,7 +57,7 @@ define('ALLOWED_UPLOAD_EXT', ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg']);
 // ---- Session settings -----------------------------------------------
 define('SESSION_NAME', 'cmas_session');
 define('SESSION_LIFETIME', 60 * 60 * 8); // 8-hour maximum cookie lifetime
-define('IDLE_TIMEOUT', 60 * 15); // Total inactivity timeout
+define('IDLE_TIMEOUT', 60 * 30); // Total inactivity timeout
 define('IDLE_WARNING_SECONDS', 10); // Show the expiry modal this many seconds before logout
 
 ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);

@@ -12,10 +12,11 @@ if ($id <= 0) {
 
 $pdo = db();
 $stmt = $pdo->prepare(
-    "SELECT wa.*, c.committee_name, u.full_name AS assigned_name
+    "SELECT wa.*, c.committee_name, j.jurisdiction_name, u.full_name AS assigned_name
      FROM workload_assignments wa
      INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
      INNER JOIN committees c ON c.committee_id = cm.committee_id
+     LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
      INNER JOIN users u ON u.id = cm.user_id
      WHERE wa.workload_id = :id
        AND (:is_manager = 1 OR cm.user_id = :uid)
@@ -47,9 +48,10 @@ include __DIR__ . '/../../layouts/header.php';
     </div>
     <div class="card hero-card mt-3"><div class="card-body">
       <h4><?= e($task['task_title']) ?></h4>
-      <div class="d-flex flex-wrap gap-2 mb-3"><span class="badge bg-light text-dark border"><?= e($task['status']) ?></span><span class="badge bg-light text-dark border"><?= e($task['priority']) ?></span><span class="badge bg-light text-dark border">Due: <?= $task['due_date'] ? e(formatDate($task['due_date'])) : 'No due date' ?></span></div>
+      <div class="d-flex flex-wrap gap-2 mb-3"><span class="badge bg-light text-dark border">Assigned</span><span class="badge bg-light text-dark border"><?= e($task['priority']) ?></span><span class="badge bg-light text-dark border">Due: <?= $task['due_date'] ? e(formatDate($task['due_date'])) : 'No due date' ?></span></div>
       <p class="text-muted"><?= nl2br(e($task['task_description'] ?? 'No description provided.')) ?></p>
-      <div class="small text-muted">Assigned to <?= e($task['assigned_name']) ?> &middot; <?= (int)$task['workload_points'] ?> workload point(s)</div>
+      <div class="small text-muted">Assigned to <?= e($task['assigned_name']) ?> &middot; <?= e($task['jurisdiction_name'] ?: 'Unassigned jurisdiction') ?></div>
+      <div class="small text-muted mt-1">Assigned date: <?= $task['assigned_date'] ? e(formatDate($task['assigned_date'])) : 'Not recorded' ?></div>
     </div></div>
   </div>
 </div>

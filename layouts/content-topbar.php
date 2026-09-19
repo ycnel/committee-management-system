@@ -27,18 +27,23 @@
       <button type="button" class="topbar-icon-btn position-relative" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications">
         <i class="bi bi-bell"></i>
         <?php if ($notifCount > 0): ?>
-          <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+          <span data-notification-badge class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
             <?= $notifCount > 99 ? '99+' : $notifCount ?>
           </span>
+        <?php else: ?>
+          <span data-notification-badge class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none"></span>
         <?php endif; ?>
       </button>
-      <div class="dropdown-menu dropdown-menu-end p-2" style="min-width:320px;max-height:380px;overflow-y:auto;">
-        <h6 class="dropdown-header">Notifications</h6>
+      <div class="dropdown-menu dropdown-menu-end p-2" data-notification-read-url="<?= e(APP_URL) ?>/pages/ajax_notification_read.php" style="min-width:320px;max-height:380px;overflow-y:auto;">
+        <div class="d-flex align-items-center justify-content-between px-2">
+          <h6 class="dropdown-header px-0 mb-0">Notifications</h6>
+          <?php if ($notifCount > 0): ?><button type="button" class="btn btn-link btn-sm p-0" data-mark-all-notifications>Mark all as read</button><?php endif; ?>
+        </div>
         <?php if (empty($notifItems)): ?>
           <span class="dropdown-item-text small text-muted">You're all caught up — nothing new right now.</span>
         <?php endif; ?>
         <?php foreach ($notifItems as $item): ?>
-          <a class="dropdown-item small" href="<?= e($item['url']) ?>"><?= e($item['text']) ?></a>
+          <a class="dropdown-item small<?= $item['read_at'] === null ? ' fw-semibold bg-light' : '' ?>" data-notification-id="<?= (int)$item['notification_id'] ?>" href="<?= e($item['url'] ?: '#') ?>"><?= e($item['message']) ?></a>
         <?php endforeach; ?>
       </div>
     </div>
@@ -112,6 +117,80 @@ document.addEventListener('DOMContentLoaded', function () {
       sidebar.classList.add('active');
       if (overlay) overlay.classList.add('active');
       document.body.style.overflow = 'hidden';
+    });
+  }
+
+  const notificationMenu = document.querySelector('[data-notification-read-url]');
+  const notificationBadge = document.querySelector('[data-notification-badge]');
+  const csrfToken = window.APP_CSRF_TOKEN || '';
+
+  function updateNotificationBadge(unreadCount) {
+    if (!notificationBadge) return;
+    if (unreadCount > 0) {
+      notificationBadge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+      notificationBadge.classList.remove('d-none');
+    } else {
+      notificationBadge.textContent = '';
+      notificationBadge.classList.add('d-none');
+      const markAllButton = document.querySelector('[data-mark-all-notifications]');
+      if (markAllButton) markAllButton.remove();
+    }
+  }
+
+  function markNotificationRead(notificationId, item) {
+    if (!notificationMenu || !notificationId) return Promise.resolve();
+    return fetch(notificationMenu.dataset.notificationReadUrl, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'csrf_token=' + encodeURIComponent(csrfToken)
+        + '&notification_id=' + encodeURIComponent(notificationId)
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (!data.success) return;
+        if (item) item.classList.remove('fw-semibold', 'bg-light');
+        updateNotificationBadge(Number(data.unread_count || 0));
+      });
+  }
+
+  if (notificationMenu) {
+    notificationMenu.addEventListener('click', function (event) {
+      const item = event.target.closest('[data-notification-id]');
+      if (!item) return;
+      const targetUrl = item.href;
+      if (!targetUrl || targetUrl.endsWith('#')) return;
+      event.preventDefault();
+      markNotificationRead(item.dataset.notificationId, item)
+        .catch(function () {})
+        .then(function () { window.location.href = targetUrl; });
+    });
+  }
+
+  const markAllButton = document.querySelector('[data-mark-all-notifications]');
+  if (markAllButton && notificationMenu) {
+    markAllButton.addEventListener('click', function (event) {
+      event.preventDefault();
+      fetch(notificationMenu.dataset.notificationReadUrl, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'csrf_token=' + encodeURIComponent(csrfToken) + '&mark_all=1'
+      })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (!data.success) return;
+          notificationMenu.querySelectorAll('[data-notification-id]').forEach(function (item) {
+            item.classList.remove('fw-semibold', 'bg-light');
+          });
+          markAllButton.remove();
+          updateNotificationBadge(Number(data.unread_count || 0));
+        })
+        .catch(function () {});
     });
   }
 });

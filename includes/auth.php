@@ -21,6 +21,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/activity_log.php';
+require_once __DIR__ . '/notifications.php';
 
 /**
  * FIX (network-error root cause #4): guarantee that even a totally

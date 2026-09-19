@@ -79,7 +79,13 @@ try {
         $stmt->execute([':cid' => $committeeId, ':uid' => $userId, ':role' => $memberRole, ':date' => $assignedDate]);
     }
 
-    logActivity(currentUserId(), 'Insert', $user['full_name'] . ' assigned to committee "' . $committee['committee_name'] . '" as ' . $memberRole . '.');
+    $activityId = logActivity(currentUserId(), 'Insert', $user['full_name'] . ' assigned to committee "' . $committee['committee_name'] . '" as ' . $memberRole . '.');
+    createNotification(
+        $userId,
+        'You were assigned to committee "' . $committee['committee_name'] . '" as ' . $memberRole . '.',
+        APP_URL . '/modules/committees/view.php?id=' . $committeeId,
+        $activityId
+    );
     jsonResponse(true, $user['full_name'] . ' has been assigned to the committee.');
 
 } catch (PDOException $e) {

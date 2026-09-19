@@ -26,6 +26,7 @@ class SimplePdf
     private float $margin = 36;
     private string $title;
     private string $subtitle;
+    private string $footer = '';
 
     public function __construct(string $title = '', string $subtitle = '')
     {
@@ -120,6 +121,12 @@ class SimplePdf
         $this->y -= $height;
     }
 
+    /** Add an optional footer to every generated page. */
+    public function setFooter(string $footer): void
+    {
+        $this->footer = $footer;
+    }
+
     /**
      * Render a simple bordered table with a header row.
      * @param string[] $headers
@@ -206,6 +213,10 @@ class SimplePdf
                 "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {$this->pageWidth} {$this->pageHeight}] " .
                 "/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {$contentObj} 0 R >>";
             $stream = $content;
+            if ($this->footer !== '') {
+                $footerText = $this->esc($this->footer . '  |  Page ' . ($i + 1) . ' of ' . $pageCount);
+                $stream .= "q 0.35 0.35 0.35 rg BT /F1 8 Tf 36 20 Td ({$footerText}) Tj ET Q\n";
+            }
             $objects[$contentObj] = "<< /Length " . strlen($stream) . " >>\nstream\n{$stream}endstream";
         }
 

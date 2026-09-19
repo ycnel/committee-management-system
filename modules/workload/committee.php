@@ -30,18 +30,14 @@ if (!$committee) {
 $selectedCommitteeName = $committee['committee_name'];
 
 $summaryStmt = $pdo->prepare(
-    "SELECT
-        SUM(CASE WHEN wa.status = 'Pending' THEN 1 ELSE 0 END) AS pending,
-        SUM(CASE WHEN wa.status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-        SUM(CASE WHEN wa.status = 'Completed' THEN 1 ELSE 0 END) AS completed,
-        SUM(CASE WHEN wa.status = 'Overdue' OR (wa.status IN ('Pending','In Progress') AND wa.due_date IS NOT NULL AND wa.due_date < CURDATE()) THEN 1 ELSE 0 END) AS overdue
+  "SELECT COUNT(wa.workload_id) AS total_assignments
      FROM workload_assignments wa
      INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
     WHERE cm.committee_id = :cid
       AND (:is_manager = 1 OR cm.user_id = :uid)"
 );
   $summaryStmt->execute([':cid' => $selectedCommitteeId, ':is_manager' => canManage() ? 1 : 0, ':uid' => currentUserId()]);
-$committeeSummary = $summaryStmt->fetch() ?: ['pending' => 0, 'in_progress' => 0, 'completed' => 0, 'overdue' => 0];
+$committeeSummary = $summaryStmt->fetch() ?: ['total_assignments' => 0];
 
 include __DIR__ . '/../../layouts/header.php';
 ?>
@@ -74,24 +70,12 @@ include __DIR__ . '/../../layouts/header.php';
     <div class="workload-mini-overview mb-3">
       <div class="workload-mini-overview-header">
         <span class="workload-mini-title"><?= e($selectedCommitteeName) ?></span>
-        <span class="workload-mini-subtitle">Task overview</span>
+        <span class="workload-mini-subtitle">Assignment overview</span>
       </div>
       <div class="workload-mini-stat-grid">
-        <div class="workload-mini-stat workload-mini-stat-completed">
-          <span>Completed</span>
-          <strong><?= (int)$committeeSummary['completed'] ?></strong>
-        </div>
-        <div class="workload-mini-stat workload-mini-stat-overdue">
-          <span>Overdue</span>
-          <strong><?= (int)$committeeSummary['overdue'] ?></strong>
-        </div>
-        <div class="workload-mini-stat workload-mini-stat-progress">
-          <span>In Progress</span>
-          <strong><?= (int)$committeeSummary['in_progress'] ?></strong>
-        </div>
         <div class="workload-mini-stat workload-mini-stat-pending">
-          <span>Pending</span>
-          <strong><?= (int)$committeeSummary['pending'] ?></strong>
+          <span>Assigned</span>
+          <strong><?= (int)$committeeSummary['total_assignments'] ?></strong>
         </div>
       </div>
     </div>
@@ -102,14 +86,6 @@ include __DIR__ . '/../../layouts/header.php';
           <input type="hidden" name="committee_id" value="<?= (int)$selectedCommitteeId ?>">
           <div class="col-md-4">
             <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search task title...">
-          </div>
-          <div class="col-md-2">
-            <select class="form-select form-select-sm" name="status">
-              <option value="">All Statuses</option>
-              <?php foreach (['Pending', 'In Progress', 'Completed', 'Overdue'] as $s): ?>
-                <option value="<?= e($s) ?>"><?= e($s) ?></option>
-              <?php endforeach; ?>
-            </select>
           </div>
           <div class="col-md-3">
             <select class="form-select form-select-sm" name="priority">
@@ -181,7 +157,6 @@ include __DIR__ . '/../../layouts/header.php';
             <div class="row g-3">
               <div class="col-md-6"><label class="form-label">Assign To <span class="text-danger">*</span></label><select name="committee_member_id" id="wl_member" class="form-select" required><option value="">-- Select Committee First --</option></select></div>
               <div class="col-md-3"><label class="form-label">Priority</label><select name="priority" id="wl_priority" class="form-select"><?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?><option value="<?= e($p) ?>" <?= $p === 'Medium' ? 'selected' : '' ?>><?= e($p) ?></option><?php endforeach; ?></select></div>
-              <div class="col-md-3"><label class="form-label">Status</label><select name="status" id="wl_status" class="form-select"><?php foreach (['Pending', 'In Progress', 'Completed', 'Overdue'] as $s): ?><option value="<?= e($s) ?>"><?= e($s) ?></option><?php endforeach; ?></select></div>
             </div>
           </section>
 
@@ -190,7 +165,6 @@ include __DIR__ . '/../../layouts/header.php';
             <div class="mt-3" id="wl_ai_panel_wrap" style="display:none;"><div class="task-ai-result"><div class="d-flex justify-content-between align-items-center"><span class="small fw-semibold text-primary"><i class="bi bi-cpu"></i> AI Recommendation</span><span id="wl_ai_error_badge" class="badge bg-warning text-dark" style="display:none;"></span></div><div id="wl_ai_summary" class="small mt-2"></div><div id="wl_ai_reasoning" class="small text-muted mt-2 fst-italic"></div></div></div>
             <div class="row g-3">
               <div class="col-12"><label class="form-label task-description-label">Description <span id="wl_ai_desc_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle task-ai-badge" style="display:none;"><i class="bi bi-stars"></i> AI Generated by Gemini</span></label><textarea name="task_description" id="wl_description" class="form-control" rows="3" placeholder="Describe the task, or generate one in Step 1."></textarea></div>
-              <div class="col-md-6"><label class="form-label">Workload Points</label><input type="number" name="workload_points" id="wl_points" class="form-control" min="1" max="100" value="1"></div>
               <div class="col-md-6"><label class="form-label">Due Date</label><input type="date" name="due_date" id="wl_due" class="form-control"></div>
             </div>
           </section>

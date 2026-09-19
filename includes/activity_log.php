@@ -17,7 +17,7 @@ require_once __DIR__ . '/../config/database.php';
  * @param string   $action  Short action label, e.g. 'Login', 'Insert Hearing', 'Delete Issue'
  * @param string   $details Optional free-text details
  */
-function logActivity(?int $userId, string $action, string $details = ''): void
+function logActivity(?int $userId, string $action, string $details = ''): ?int
 {
     try {
         $stmt = db()->prepare(
@@ -34,8 +34,10 @@ function logActivity(?int $userId, string $action, string $details = ''): void
                 ? substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 500)
                 : null,
         ]);
+        return (int)db()->lastInsertId();
     } catch (Throwable $e) {
         // Logging must never break the main request flow.
         error_log('Activity log failed: ' . $e->getMessage());
+        return null;
     }
 }

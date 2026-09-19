@@ -79,6 +79,13 @@
   const modal = new bootstrap.Modal(modalEl);
   const form = document.getElementById('userForm');
   const passwordInput = document.getElementById('us_password');
+  const backgroundFields = [
+    'highest_education', 'degree_course', 'school_university', 'major_specialization',
+    'certifications_training', 'current_profession', 'years_experience',
+    'previous_positions', 'previous_organizations', 'government_experience',
+    'primary_expertise', 'secondary_expertise', 'knowledge_areas', 'relevant_skills',
+    'committee_expertise', 'expertise_keywords'
+  ];
   initPasswordPolicyHint('us_password');
 
   const addBtn = document.getElementById('btnAddUser');
@@ -87,6 +94,7 @@
       form.reset();
       document.getElementById('us_id').value = 0;
       document.getElementById('us_status').value = 'Active';
+      backgroundFields.forEach(field => { document.getElementById('us_' + field).value = ''; });
       passwordInput.setAttribute('required', 'required');
       document.getElementById('userModalTitle').innerHTML = '<i class="bi bi-person-plus"></i> New User';
       modal.show();
@@ -103,6 +111,10 @@
       document.getElementById('us_email').value = u.email || '';
       document.getElementById('us_role').value = u.role_id || '';
       document.getElementById('us_status').value = u.status || 'Active';
+      backgroundFields.forEach(field => {
+        const input = document.getElementById('us_' + field);
+        if (input) input.value = u[field] || '';
+      });
       passwordInput.removeAttribute('required');
       document.getElementById('userModalTitle').innerHTML = '<i class="bi bi-pencil-square"></i> Edit User';
       modal.show();

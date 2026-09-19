@@ -4,8 +4,8 @@
  * ------------------------------------------------------------------
  * Handles CREATE and UPDATE for the `workload_assignments` table
  * (id=0 means create). This is the "Calculate Workload" write path:
- * every task carries workload_points, which the Workload Recommendation
- * panel and the Performance dashboard both read back from.
+ * assignment fields stay focused on title, description, priority, dates,
+ * and the assigned committee member.
  *
  * All values are re-validated here regardless of where they came from
  * (typed manually, or auto-filled by "Generate with AI") — nothing
@@ -26,30 +26,44 @@ $committeeMemberId = (int)($_POST['committee_member_id'] ?? 0);
 $title             = clean($_POST['task_title'] ?? '');
 $description       = clean($_POST['task_description'] ?? '');
 $priority          = clean($_POST['priority'] ?? 'Medium');
-$points            = (int)($_POST['workload_points'] ?? 1);
 $dueDate           = clean($_POST['due_date'] ?? '') ?: null;
-$status            = clean($_POST['status'] ?? 'Pending');
 $aiRecommendationId = (int)($_POST['ai_recommendation_id'] ?? 0) ?: null;
 
 $allowedPriority = ['Low', 'Medium', 'High', 'Urgent'];
-$allowedStatus   = ['Pending', 'In Progress', 'Completed', 'Overdue'];
 
 $errors = [];
 if ($committeeMemberId <= 0) $errors[] = 'Please select who this task is assigned to.';
 if ($title === '') $errors[] = 'Task title is required.';
 if (!in_array($priority, $allowedPriority, true)) $errors[] = 'Invalid priority value.';
-if (!in_array($status, $allowedStatus, true)) $errors[] = 'Invalid status value.';
-if ($points < 1 || $points > 100) $errors[] = 'Workload points must be between 1 and 100.';
 if ($dueDate !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) $errors[] = 'Invalid due date.';
 if (!empty($errors)) jsonResponse(false, implode(' ', $errors));
 
 $pdo = db();
 
-$memberCheck = $pdo->prepare('SELECT committee_member_id FROM committee_members WHERE committee_member_id = :id AND status = \'Active\'');
+$memberCheck = $pdo->prepare('SELECT committee_member_id, user_id FROM committee_members WHERE committee_member_id = :id AND status = \'Active\'');
 $memberCheck->execute([':id' => $committeeMemberId]);
-if (!$memberCheck->fetch()) jsonResponse(false, 'Selected committee member is invalid or inactive.');
+$member = $memberCheck->fetch();
+if (!$member) jsonResponse(false, 'Selected committee member is invalid or inactive.');
 
-$completionDate = $status === 'Completed' ? date('Y-m-d') : null;
+$duplicateTaskStmt = $pdo->prepare(
+    'SELECT workload_id
+     FROM workload_assignments
+     WHERE committee_member_id = :committee_member_id
+       AND LOWER(TRIM(task_title)) = LOWER(TRIM(:task_title))
+       AND ((due_date = :due_date_match) OR (due_date IS NULL AND :due_date_null IS NULL))
+       AND workload_id != :workload_id
+     LIMIT 1'
+);
+$duplicateTaskStmt->execute([
+    ':committee_member_id' => $committeeMemberId,
+    ':task_title' => $title,
+    ':due_date_match' => $dueDate,
+    ':due_date_null' => $dueDate,
+    ':workload_id' => $id,
+]);
+if ($duplicateTaskStmt->fetch()) {
+    jsonResponse(false, 'A task with this title is already assigned to this member for the selected due date.');
+}
 
 /**
  * Links this saved task back to the AI recommendation log row (if the
@@ -77,31 +91,26 @@ function cmas_link_ai_recommendation(PDO $pdo, int $recommendationId, int $workl
 
 try {
     if ($id > 0) {
-        $before = $pdo->prepare('SELECT status FROM workload_assignments WHERE workload_id = :id');
+        $before = $pdo->prepare(
+            'SELECT cm.user_id
+             FROM workload_assignments wa
+             INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
+             WHERE wa.workload_id = :id'
+        );
         $before->execute([':id' => $id]);
         $beforeRow = $before->fetch();
         if (!$beforeRow) jsonResponse(false, 'Task not found.');
 
-        // Preserve an existing completion_date unless status is changing to/from Completed.
-        if ($status === 'Completed' && $beforeRow['status'] !== 'Completed') {
-            $completionDateSql = 'completion_date = :cd,';
-        } elseif ($status !== 'Completed') {
-            $completionDateSql = 'completion_date = NULL,';
-        } else {
-            $completionDateSql = '';
-        }
-
         $stmt = $pdo->prepare(
             "UPDATE workload_assignments SET committee_member_id = :cmid, task_title = :title, task_description = :desc,
-             priority = :priority, workload_points = :points, due_date = :due, $completionDateSql status = :status
+            priority = :priority, due_date = :due
              WHERE workload_id = :id"
         );
         $execParams = [
             ':cmid' => $committeeMemberId, ':title' => $title, ':desc' => $description,
-            ':priority' => $priority, ':points' => $points, ':due' => $dueDate,
-            ':status' => $status, ':id' => $id,
+            ':priority' => $priority, ':due' => $dueDate,
+            ':id' => $id,
         ];
-        if ($completionDateSql === 'completion_date = :cd,') $execParams[':cd'] = $completionDate;
         $stmt->execute($execParams);
 
         if ($aiRecommendationId) {
@@ -112,20 +121,33 @@ try {
             }
         }
 
-        logActivity(currentUserId(), 'Update', 'Updated task #' . $id . ' (' . $title . ')');
+        $activityId = logActivity(currentUserId(), 'Update', 'Updated task #' . $id . ' (' . $title . ')');
+        createNotification(
+            (int)$member['user_id'],
+            'Task updated: ' . $title,
+            APP_URL . '/modules/workload/task.php?id=' . $id,
+            $activityId
+        );
+        if ((int)$beforeRow['user_id'] !== (int)$member['user_id']) {
+            createNotification(
+                (int)$beforeRow['user_id'],
+                'Task reassigned: ' . $title,
+                APP_URL . '/modules/workload/index.php',
+                $activityId
+            );
+        }
         jsonResponse(true, 'Task updated successfully.', ['id' => $id]);
     }
 
     // ---- CREATE ----
     $stmt = $pdo->prepare(
-        'INSERT INTO workload_assignments (committee_member_id, task_title, task_description, priority, workload_points,
-         assigned_date, due_date, completion_date, status, created_at)
-         VALUES (:cmid, :title, :desc, :priority, :points, CURDATE(), :due, :cd, :status, NOW())'
+        'INSERT INTO workload_assignments (committee_member_id, task_title, task_description, priority,
+         assigned_date, due_date, created_at)
+         VALUES (:cmid, :title, :desc, :priority, CURDATE(), :due, NOW())'
     );
     $stmt->execute([
         ':cmid' => $committeeMemberId, ':title' => $title, ':desc' => $description,
-        ':priority' => $priority, ':points' => $points, ':due' => $dueDate,
-        ':cd' => $completionDate, ':status' => $status,
+        ':priority' => $priority, ':due' => $dueDate,
     ]);
     $id = (int)$pdo->lastInsertId();
 
@@ -138,10 +160,19 @@ try {
         }
     }
 
-    logActivity(currentUserId(), 'Insert', 'Created task #' . $id . ' (' . $title . ')');
+    $activityId = logActivity(currentUserId(), 'Insert', 'Created task #' . $id . ' (' . $title . ')');
+    createNotification(
+        (int)$member['user_id'],
+        'New task assigned to you: ' . $title,
+        APP_URL . '/modules/workload/task.php?id=' . $id,
+        $activityId
+    );
     jsonResponse(true, 'Task assigned successfully.', ['id' => $id]);
 
 } catch (PDOException $e) {
     error_log('Workload save error: ' . $e->getMessage());
+    if ((int)$e->getCode() === 23000 || str_contains(strtolower($e->getMessage()), 'uq_workload_member_task_due')) {
+        jsonResponse(false, 'A task with this title is already assigned to this member for the selected due date.');
+    }
     jsonResponse(false, 'A database error occurred while saving the task.');
 }

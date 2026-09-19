@@ -48,7 +48,6 @@ $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
 $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' => 'danger'];
-$cardColors = ['#0B2E59', '#295B3F', '#7A2E3A', '#7B5E1B', '#245B73', '#4B4168'];
 ?>
 <div class="committee-list-toolbar">
   <span class="small text-muted">Sort committees by:</span>
@@ -62,10 +61,8 @@ $cardColors = ['#0B2E59', '#295B3F', '#7A2E3A', '#7B5E1B', '#245B73', '#4B4168']
   <div class="committee-empty-state text-center text-muted py-5">No committees found.</div>
 <?php else: ?>
   <div class="committee-card-grid">
-    <?php foreach ($rows as $r):
-      $cardColor = $cardColors[abs(crc32((string)$r['committee_id'])) % count($cardColors)];
-    ?>
-      <article class="committee-card committee-row" style="--committee-card-color: <?= e($cardColor) ?>;" data-href="view.php?id=<?= (int)$r['committee_id'] ?>" tabindex="0">
+    <?php foreach ($rows as $r): ?>
+      <article class="committee-card committee-row" data-href="view.php?id=<?= (int)$r['committee_id'] ?>" tabindex="0">
         <div class="committee-card-details">
           <div class="committee-card-meta">
             <span><?= e($r['jurisdiction_name'] ?: 'Unassigned jurisdiction') ?></span>

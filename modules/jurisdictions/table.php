@@ -19,8 +19,8 @@ $sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
 $where = [];
 $params = [];
 if ($search !== '') {
-    $where[] = '(j.jurisdiction_name LIKE :s1 OR j.category LIKE :s2 OR j.description LIKE :s3)';
-    $params[':s1'] = $params[':s2'] = $params[':s3'] = '%' . $search . '%';
+  $where[] = '(j.jurisdiction_name LIKE :s1 OR j.category LIKE :s2 OR j.description LIKE :s3 OR j.scope_definition LIKE :s4 OR j.covered_areas LIKE :s5)';
+  $params[':s1'] = $params[':s2'] = $params[':s3'] = $params[':s4'] = $params[':s5'] = '%' . $search . '%';
 }
 if ($statusFil !== '') { $where[] = 'j.status = :status'; $params[':status'] = $statusFil; }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
@@ -52,7 +52,7 @@ $rows = $stmt->fetchAll();
 <?php else: ?>
   <div class="jurisdiction-card-grid">
     <?php foreach ($rows as $r): ?>
-      <article class="jurisdiction-card" data-href="index.php" tabindex="0">
+          <article class="jurisdiction-card" tabindex="0">
         <div class="jurisdiction-card-details">
           <div class="jurisdiction-card-meta">
             <span><?= $r['category'] ? e($r['category']) : 'General scope' ?></span>
@@ -60,11 +60,14 @@ $rows = $stmt->fetchAll();
           </div>
           <div class="jurisdiction-card-title"><?= e($r['jurisdiction_name']) ?></div>
           <div class="jurisdiction-card-description">
-            <?= e($r['description'] ? truncate($r['description'], 110) : 'No description provided.') ?>
+            <?= e(truncate($r['description'] ?: ($r['scope_definition'] ?? ''), 110) ?: 'No description or scope summary provided.') ?>
           </div>
           <div class="jurisdiction-card-footer">
             <span class="jurisdiction-card-status status-<?= e(strtolower($r['status'])) ?>"><?= e($r['status']) ?></span>
             <div class="jurisdiction-actions">
+              <a class="jurisdiction-action-button" href="view.php?id=<?= (int)$r['jurisdiction_id'] ?>" title="View jurisdiction details">
+                <i class="bi bi-eye"></i>
+              </a>
               <button type="button" class="jurisdiction-action-button btn-edit-jurisdiction" data-id="<?= (int)$r['jurisdiction_id'] ?>" title="Edit jurisdiction">
                 <i class="bi bi-pencil-square"></i>
               </button>

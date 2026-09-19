@@ -11,7 +11,12 @@ if ($id <= 0) jsonResponse(false, 'Invalid task id.');
 
 $pdo = db();
 try {
-    $stmt = $pdo->prepare('SELECT task_title FROM workload_assignments WHERE workload_id = :id');
+    $stmt = $pdo->prepare(
+        'SELECT wa.task_title, cm.user_id
+         FROM workload_assignments wa
+         INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
+         WHERE wa.workload_id = :id'
+    );
     $stmt->execute([':id' => $id]);
     $task = $stmt->fetch();
     if (!$task) jsonResponse(false, 'Task not found.');
@@ -19,7 +24,13 @@ try {
     $del = $pdo->prepare('DELETE FROM workload_assignments WHERE workload_id = :id');
     $del->execute([':id' => $id]);
 
-    logActivity(currentUserId(), 'Delete', 'Deleted task #' . $id . ' (' . $task['task_title'] . ')');
+    $activityId = logActivity(currentUserId(), 'Delete', 'Deleted task #' . $id . ' (' . $task['task_title'] . ')');
+    createNotification(
+        (int)$task['user_id'],
+        'Task deleted: ' . $task['task_title'],
+        APP_URL . '/modules/workload/index.php',
+        $activityId
+    );
     jsonResponse(true, 'Task deleted successfully.');
 
 } catch (PDOException $e) {

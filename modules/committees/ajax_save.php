@@ -79,5 +79,8 @@ try {
 
 } catch (PDOException $e) {
     error_log('Committee save error: ' . $e->getMessage());
+    if ((int)$e->getCode() === 23000) {
+        jsonResponse(false, 'A committee with this name already exists.');
+    }
     jsonResponse(false, 'A database error occurred while saving the committee.');
 }

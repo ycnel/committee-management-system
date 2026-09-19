@@ -25,7 +25,7 @@ if (!in_array($role, $allowedRoles, true)) jsonResponse(false, 'Invalid committe
 $pdo = db();
 try {
     $stmt = $pdo->prepare(
-        'SELECT cm.committee_id, u.full_name, c.committee_name
+        'SELECT cm.committee_id, cm.user_id, u.full_name, c.committee_name
          FROM committee_members cm
          INNER JOIN users u ON u.id = cm.user_id
          INNER JOIN committees c ON c.committee_id = cm.committee_id
@@ -47,7 +47,13 @@ try {
     $upd = $pdo->prepare('UPDATE committee_members SET member_role = :role WHERE committee_member_id = :id');
     $upd->execute([':role' => $role, ':id' => $id]);
 
-    logActivity(currentUserId(), 'Update', $member['full_name'] . '\'s role in "' . $member['committee_name'] . '" changed to ' . $role . '.');
+    $activityId = logActivity(currentUserId(), 'Update', $member['full_name'] . '\'s role in "' . $member['committee_name'] . '" changed to ' . $role . '.');
+    createNotification(
+        (int)$member['user_id'],
+        'Your role in committee "' . $member['committee_name'] . '" changed to ' . $role . '.',
+        APP_URL . '/modules/committees/view.php?id=' . $member['committee_id'],
+        $activityId
+    );
     jsonResponse(true, 'Role updated successfully.');
 
 } catch (PDOException $e) {

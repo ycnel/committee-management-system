@@ -23,46 +23,32 @@
 $pageTitle = $pageTitle ?? 'Dashboard';
 $user = currentUser();
 
-/**
- * Build a notification list for the bell icon: overdue tasks and
- * tasks due soon, scoped to what the signed-in user can act on.
- */
+/** Build the bell list from notifications addressed to this user. */
 $notifItems = [];
+$notifCount = 0;
 try {
     $pdo = db();
+    $notificationStmt = $pdo->prepare(
+        'SELECT notification_id, message, url, read_at
+         FROM notifications
+         WHERE recipient_user_id = :user_id
+         ORDER BY created_at DESC, notification_id DESC
+         LIMIT 20'
+    );
+    $notificationStmt->execute([':user_id' => (int)currentUserId()]);
+    $notifItems = $notificationStmt->fetchAll();
 
-    $overdueCount = (int)$pdo->query(
-        "SELECT COUNT(*) FROM workload_assignments
-         WHERE status != 'Completed' AND due_date IS NOT NULL AND due_date < CURDATE()"
-    )->fetchColumn();
-    if ($overdueCount > 0) {
-        $notifItems[] = ['text' => $overdueCount . ' task(s) are overdue', 'url' => APP_URL . '/modules/workload/index.php?status=Overdue'];
-    }
-
-    $dueSoonCount = (int)$pdo->query(
-        "SELECT COUNT(*) FROM workload_assignments
-         WHERE status IN ('Pending','In Progress') AND due_date IS NOT NULL
-         AND due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY)"
-    )->fetchColumn();
-    if ($dueSoonCount > 0) {
-        $notifItems[] = ['text' => $dueSoonCount . ' task(s) due within 3 days', 'url' => APP_URL . '/modules/workload/index.php'];
-    }
-
-    if (in_array(currentRole(), [ROLE_ADMIN, ROLE_STAFF], true)) {
-        $unassignedCount = (int)$pdo->query(
-            "SELECT COUNT(*) FROM committees WHERE status = 'Active'
-             AND committee_id NOT IN (SELECT committee_id FROM committee_members WHERE status = 'Active')"
-        )->fetchColumn();
-        if ($unassignedCount > 0) {
-            $notifItems[] = ['text' => $unassignedCount . ' committee(s) have no members yet', 'url' => APP_URL . '/modules/committees/index.php'];
-        }
-    }
+    $unreadStmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM notifications
+         WHERE recipient_user_id = :user_id AND read_at IS NULL'
+    );
+    $unreadStmt->execute([':user_id' => (int)currentUserId()]);
+    $notifCount = (int)$unreadStmt->fetchColumn();
 } catch (Throwable $e) {
     error_log('Notification bell error: ' . $e->getMessage());
     $notifItems = [];
+    $notifCount = 0;
 }
-
-$notifCount = count($notifItems);
 ?>
 <!DOCTYPE html>
 <html lang="en">

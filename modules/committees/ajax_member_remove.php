@@ -22,7 +22,7 @@ if ($id <= 0) jsonResponse(false, 'Invalid assignment id.');
 $pdo = db();
 try {
     $stmt = $pdo->prepare(
-        'SELECT cm.committee_id, u.full_name, c.committee_name
+        'SELECT cm.committee_id, cm.user_id, u.full_name, c.committee_name
          FROM committee_members cm
          INNER JOIN users u ON u.id = cm.user_id
          INNER JOIN committees c ON c.committee_id = cm.committee_id
@@ -35,7 +35,13 @@ try {
     $upd = $pdo->prepare("UPDATE committee_members SET status = 'Inactive' WHERE committee_member_id = :id");
     $upd->execute([':id' => $id]);
 
-    logActivity(currentUserId(), 'Delete', $member['full_name'] . ' removed from committee "' . $member['committee_name'] . '".');
+    $activityId = logActivity(currentUserId(), 'Delete', $member['full_name'] . ' removed from committee "' . $member['committee_name'] . '".');
+    createNotification(
+        (int)$member['user_id'],
+        'You were removed from committee "' . $member['committee_name'] . '".',
+        APP_URL . '/modules/committees/index.php',
+        $activityId
+    );
     jsonResponse(true, 'Member removed from committee.');
 
 } catch (PDOException $e) {

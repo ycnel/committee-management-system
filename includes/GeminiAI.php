@@ -9,8 +9,8 @@
  * given the Task Title plus the ACTUAL, real-time committee/member/
  * workload data (gathered directly by ajax_ai_recommend.php), and is
  * responsible for generating the whole task suggestion in one shot:
- * description, recommended member, priority, workload points, due
- * date, status, and its reasoning. WorkloadAI.php itself is untouched
+ * description, recommended member, priority, due date, and its
+ * reasoning. WorkloadAI.php itself is untouched
  * and unused by this workflow — it's left in place for anything else
  * in the system that still depends on it.
  *
@@ -19,7 +19,7 @@
  *   - Never invents a member — recommended_member_id is rejected
  *     unless it is one of the member_id values actually sent to it.
  *   - Never lets AI output reach the database or UI without passing
- *     strict JSON-shape + value validation first (priority/status
+ *     strict JSON-shape + value validation first (priority and date
  *     enums, numeric ranges, valid non-past due dates).
  *   - Never throws out of generateTaskRecommendation() — every failure
  *     mode (API unavailable, model missing, timeout,
@@ -38,7 +38,6 @@ class GeminiAI
     private int $connectTimeout;
 
     private const VALID_PRIORITY = ['Low', 'Medium', 'High', 'Urgent'];
-    private const VALID_STATUS = ['Pending', 'In Progress', 'Completed', 'Overdue'];
     private const MAX_DESCRIPTION_LEN = 1000;
     private const MAX_REASONING_LEN = 500;
     private const MIN_POINTS = 1;
@@ -184,6 +183,65 @@ class GeminiAI
         return $status;
     }
 
+    /** Generate cautious, data-grounded narrative sections for reports. */
+    public function generateReportNarrative(array $context): array
+    {
+        if (!$this->enabled || $this->apiKey === '') {
+            return ['available' => false, 'sections' => []];
+        }
+
+        $availability = $this->checkAvailability();
+        if (!$availability['online'] || !$availability['model_found']) {
+            return ['available' => false, 'sections' => []];
+        }
+
+        $isPerformanceReport = in_array($context['report_type'] ?? '', ['Performance Report', 'Assignment Monitoring Report'], true);
+        $systemPrompt = 'You draft formal CMAS assignment-monitoring narrative only from supplied JSON data. Discuss committee assignment distribution, member assignment counts, jurisdiction coverage, assignment dates, and factual assignment patterns. Never claim that a member completed, failed, submitted, or performed legislative work, and never invent people, tasks, dates, meetings, statistics, laws, actions, scores, or official decisions. Do not perform or replace factual calculations; interpret only supplied values. If data is insufficient, write exactly "Insufficient assignment data available for analysis." Treat the output as a draft for human review. Return JSON only with string keys executive_summary, analysis, observations, recommendations, conclusion' . ($isPerformanceReport ? ', committee_analysis (array of objects with committee_id and analysis), member_analysis (array of objects with committee_member_id and analysis)' : '') . '.';
+        $userPrompt = "Prepare narrative sections for this report data:\n" . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        try {
+            $raw = $this->callGemini($systemPrompt, $userPrompt);
+            $clean = trim(preg_replace('/^```json\s*|```$/i', '', $raw) ?? $raw);
+            $decoded = json_decode($clean, true);
+            $keys = ['executive_summary', 'analysis', 'observations', 'recommendations', 'conclusion'];
+            if (!is_array($decoded)) return ['available' => false, 'sections' => []];
+            $sections = [];
+            foreach ($keys as $key) {
+                $value = is_string($decoded[$key] ?? null) ? trim(strip_tags($decoded[$key])) : '';
+                $sections[$key] = $value !== '' ? mb_substr($value, 0, 2000) : 'Insufficient data available for this section.';
+            }
+            if ($isPerformanceReport) {
+                $validCommitteeIds = array_map('intval', array_column($context['performance_data'] ?? [], 'committee_id'));
+                $validMemberIds = [];
+                foreach ($context['performance_data'] ?? [] as $committee) {
+                    foreach ($committee['members'] ?? [] as $member) {
+                        $validMemberIds[] = (int)$member['committee_member_id'];
+                    }
+                }
+                $sections['committee_analysis'] = [];
+                foreach ($decoded['committee_analysis'] ?? [] as $analysis) {
+                    $committeeId = (int)($analysis['committee_id'] ?? 0);
+                    $text = is_string($analysis['analysis'] ?? null) ? trim(strip_tags($analysis['analysis'])) : '';
+                    if (in_array($committeeId, $validCommitteeIds, true) && $text !== '') {
+                        $sections['committee_analysis'][$committeeId] = mb_substr($text, 0, 2000);
+                    }
+                }
+                $sections['member_analysis'] = [];
+                foreach ($decoded['member_analysis'] ?? [] as $analysis) {
+                    $memberId = (int)($analysis['committee_member_id'] ?? 0);
+                    $text = is_string($analysis['analysis'] ?? null) ? trim(strip_tags($analysis['analysis'])) : '';
+                    if (in_array($memberId, $validMemberIds, true) && $text !== '') {
+                        $sections['member_analysis'][$memberId] = mb_substr($text, 0, 2000);
+                    }
+                }
+            }
+            return ['available' => true, 'sections' => $sections];
+        } catch (Throwable $e) {
+            error_log('Gemini report narrative error: ' . $e->getMessage());
+            return ['available' => false, 'sections' => []];
+        }
+    }
+
     /**
      * Main entry point for the new workflow.
      *
@@ -193,16 +251,15 @@ class GeminiAI
      *                real workload metrics, gathered directly from the
      *                database by the caller (ajax_ai_recommend.php).
      *                Shape per member:
-     *                  ['member_id'=>int,'name'=>string,'role'=>string,
-     *                   'current_workload'=>float,'active_committees'=>float,
-     *                   'completion_rate'=>float,'on_time_rate'=>float,
-     *                   'overdue_tasks'=>float,'days_since_last_assignment'=>float]
+    *                  ['member_id'=>int,'name'=>string,'role'=>string,
+    *                   'active_assignments'=>int,'active_committees'=>float,
+    *                   'days_since_last_assignment'=>float]
      *
      * Always returns a well-formed array with an 'ai_available' key,
      * even on total failure, so the caller never has to special-case
      * "AI crashed" vs. "AI declined."
      */
-    public function generateTaskRecommendation(string $taskTitle, string $committeeName, array $members): array
+    public function generateTaskRecommendation(string $taskTitle, string $committeeName, array $members, array $taskContext = []): array
     {
         $start = microtime(true);
 
@@ -227,7 +284,7 @@ class GeminiAI
         $validIds = array_map('intval', array_column($members, 'member_id'));
 
         $systemPrompt = $this->buildSystemPrompt();
-        $userPrompt = $this->buildUserPrompt($taskTitle, $committeeName, $members);
+        $userPrompt = $this->buildUserPrompt($taskTitle, $committeeName, $members, $taskContext);
 
         try {
             $raw = $this->callGemini($systemPrompt, $userPrompt);
@@ -257,10 +314,13 @@ class GeminiAI
             'recommended_member_id' => null,
             'description' => '',
             'priority' => null,
-            'workload_points' => null,
             'due_date' => null,
-            'status' => null,
             'reasoning' => '',
+            'expertise_match' => null,
+            'experience_match' => null,
+            'workload_factor' => null,
+            'committee_relevance' => null,
+            'overall_relevance' => null,
             'warning' => 'AI task generation is currently unavailable. Please fill in the task details manually.',
             'error_detail' => $reason,
             'model_used' => $this->model,
@@ -278,48 +338,61 @@ Given a task title and the ACTUAL active members of a committee along with their
 
 Rules:
 1. Never invent a member. recommended_member_id MUST be exactly one of the member_id values given to you.
-2. Never invent numbers — base workload_points and your reasoning on the real data provided, not on assumptions.
-3. Prefer members with lower current_workload, fewer overdue_tasks, and fewer active_committees.
-4. Prefer members with higher completion_rate and higher on_time_rate.
-5. Consider fairness: a member with a higher days_since_last_assignment has gone longer without new work and should be favored, all else being roughly equal.
-6. Write a concise, professional task description (1-3 sentences) appropriate to the task title. Do not include placeholders like "[insert here]".
-7. priority must be exactly one of: Low, Medium, High, Urgent.
-8. status must be exactly one of: Pending, In Progress, Completed, Overdue — for a brand-new task this should almost always be "Pending".
-9. workload_points must be a whole number from 1 to 100, proportional to how demanding the task sounds.
-10. due_date must be in YYYY-MM-DD format, must be a real calendar date, and must NOT be before today ({$today}). Pick a reasonable deadline based on priority (e.g. Urgent = a few days out, Low = a few weeks out).
-11. reasoning should be 1-3 short sentences explaining why you picked that member and those values, referencing the actual data (e.g. workload, completion rate, overdue tasks).
-12. Return valid JSON only. No markdown, no code fences, no text outside the JSON object.
+2. Never invent qualifications, experience, skills, expertise, numbers, or background facts. Use only the actual values supplied for each member.
+3. Analyze the assignment title, description, committee, jurisdiction, and requirements against each member's supplied Professional and Expertise Profile.
+4. Use this strict priority order when selecting a member:
+    a. PRIMARY: contextual match to the Professional and Expertise Profile, including educational attainment, degree/course, major/specialization, profession, years of experience, previous positions, government/legislative experience, primary/secondary expertise, knowledge areas, relevant skills, committee expertise, and expertise keywords.
+    b. SECONDARY: current assignment count and assignment balance.
+    c. THIRD: committee and jurisdiction relevance.
+    d. LAST: other available assignment information such as role, active committee count, previous assignment titles, and assignment recency.
+5. Profile suitability must be the deciding factor whenever the candidates differ meaningfully in relevant education, experience, expertise, or skills. Do not select a member merely because they have fewer assignments when another member has a stronger profile match.
+6. A member with a partially completed or empty profile remains eligible. Compare the actual information available, do not exclude the member, and do not fill missing fields with assumptions.
+7. If profile information is insufficient for a confident distinction, state that the available profile data is limited and use assignment count, committee/jurisdiction relevance, and other supplied facts only as secondary factors.
+8. Score the selected member using 0-100 recommendation-support indicators: expertise_match, experience_match, workload_factor, committee_relevance, and overall_relevance. These describe assignment suitability only, not performance. overall_relevance must reflect profile match first, then the secondary factors.
+9. Write a concise, professional task description (1-3 sentences) appropriate to the task title. Do not include placeholders like "[insert here]".
+10. priority must be exactly one of: Low, Medium, High, Urgent.
+11. due_date must be in YYYY-MM-DD format, must be a real calendar date, and must NOT be before today ({$today}). Pick a reasonable deadline based on priority.
+12. reasoning should be 1-3 short sentences explaining the recommendation using actual profile fields first, then any secondary assignment facts. If profile data is missing, say so rather than inventing it.
+14. Return valid JSON only. No markdown, no code fences, no text outside the JSON object.
 
 Respond with a single JSON object matching exactly this shape:
 {
   "recommended_member_id": <int, must be one of the member_id values given>,
   "description": "<string>",
   "priority": "Low" | "Medium" | "High" | "Urgent",
-  "workload_points": <int 1-100>,
   "due_date": "YYYY-MM-DD",
-  "status": "Pending" | "In Progress" | "Completed" | "Overdue",
+    "expertise_match": <int 0-100>,
+    "experience_match": <int 0-100>,
+    "workload_factor": <int 0-100>,
+    "committee_relevance": <int 0-100>,
+    "overall_relevance": <int 0-100>,
   "reasoning": "<string>"
 }
 PROMPT;
     }
 
-    private function buildUserPrompt(string $taskTitle, string $committeeName, array $members): string
+        private function buildUserPrompt(string $taskTitle, string $committeeName, array $members, array $taskContext = []): string
     {
         $payload = [
             'today' => date('Y-m-d'),
             'committee_name' => $committeeName,
             'task_title' => $taskTitle,
+            'task_context' => [
+                'description' => (string)($taskContext['description'] ?? ''),
+                'priority' => (string)($taskContext['priority'] ?? ''),
+                'jurisdiction' => (string)($taskContext['jurisdiction'] ?? ''),
+                'jurisdiction_category' => (string)($taskContext['jurisdiction_category'] ?? ''),
+            ],
             'members' => array_map(function ($m) {
                 return [
                     'member_id' => (int)$m['member_id'],
                     'name' => (string)$m['name'],
                     'role' => (string)$m['role'],
-                    'current_workload' => $m['current_workload'],
+                    'active_assignments' => $m['active_assignments'] ?? 0,
                     'active_committees' => $m['active_committees'],
-                    'completion_rate' => $m['completion_rate'],
-                    'on_time_rate' => $m['on_time_rate'],
-                    'overdue_tasks' => $m['overdue_tasks'],
                     'days_since_last_assignment' => $m['days_since_last_assignment'],
+                    'background' => $m['background'] ?? [],
+                    'previous_assignments' => $m['previous_assignments'] ?? [],
                 ];
             }, $members),
         ];
@@ -408,15 +481,6 @@ PROMPT;
         $priority = $data['priority'] ?? null;
         if (!in_array($priority, self::VALID_PRIORITY, true)) { $priority = 'Medium'; $warnings[] = 'priority defaulted to Medium'; }
 
-        $status = $data['status'] ?? null;
-        if (!in_array($status, self::VALID_STATUS, true)) { $status = 'Pending'; $warnings[] = 'status defaulted to Pending'; }
-
-        $points = is_numeric($data['workload_points'] ?? null) ? (int)round((float)$data['workload_points']) : null;
-        if ($points === null || $points < self::MIN_POINTS || $points > self::MAX_POINTS) {
-            $points = max(self::MIN_POINTS, min(self::MAX_POINTS, $points ?? 5));
-            $warnings[] = 'workload_points adjusted to a valid range';
-        }
-
         $dueDate = is_string($data['due_date'] ?? null) ? trim($data['due_date']) : '';
         $today = new DateTime(date('Y-m-d'));
         $validDate = null;
@@ -435,14 +499,20 @@ PROMPT;
         $reasoning = is_string($data['reasoning'] ?? null) ? trim(strip_tags($data['reasoning'])) : '';
         $reasoning = mb_substr($reasoning, 0, self::MAX_REASONING_LEN);
 
-            return [
+        $scoreFields = ['expertise_match', 'experience_match', 'workload_factor', 'committee_relevance', 'overall_relevance'];
+        $scores = [];
+        foreach ($scoreFields as $field) {
+            $score = is_numeric($data[$field] ?? null) ? (int)round((float)$data[$field]) : 50;
+            $scores[$field] = max(0, min(100, $score));
+        }
+
+        return [
             'recommended_member_id' => $recommendedId,
             'description' => $description,
             'priority' => $priority,
-            'workload_points' => $points,
             'due_date' => $validDate,
-            'status' => $status,
             'reasoning' => $reasoning,
+            ...$scores,
             'warning' => !empty($warnings) ? ('AI response needed minor corrections: ' . implode('; ', $warnings) . '.') : null,
         ];
     }

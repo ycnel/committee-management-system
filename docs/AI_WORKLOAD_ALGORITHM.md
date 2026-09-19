@@ -50,6 +50,18 @@ Admin reviews/edits and clicks Save Task -> ajax_save.php
 | `includes/WorkloadAI.php` | **Untouched.** Still fully present, still usable by anything else in the system (e.g. the "Workload Recommendation" panel on the module's main page, which uses its own simple lowest-active-points query and was never wired to WorkloadAI's scoring engine anyway). |
 | `database/migration_ai_task_generation.sql` | New. Adds `ai_generated_fields` (TEXT) to `ai_recommendations`, storing the validated `{description, priority, workload_points, due_date, status}` object. Run this after `migration_ai_hybrid.sql`. |
 
+## Member background context
+
+Committee member recommendations may include optional data from the
+`user_background` table: education, profession, experience, expertise,
+skills, government/legislative experience, and recent assignment summaries.
+The data is limited to task-relevant context; passwords, OTP data, email
+addresses, and session credentials are never sent to the AI provider. The
+administrator still reviews and confirms the selected member manually.
+
+Install `database/migration_user_background.sql` after `database/schema.sql`
+before using the background fields in User Management.
+
 ## Not changed
 
 - `modules/workload/ai_settings.php`, `ajax_test_ai_connection.php`,

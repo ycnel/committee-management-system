@@ -39,8 +39,14 @@
     }).then(function (response) {
       window.clearTimeout(timeoutId);
       if (response.redirected) {
-        window.location.href = response.url;
-        return;
+        return response.text().then(function (html) {
+          // The redirected response already contains the one-time flash
+          // message. Render it directly so a second GET cannot consume it.
+          window.history.replaceState({}, '', response.url);
+          document.open();
+          document.write(html);
+          document.close();
+        });
       }
       return response.text().then(function (html) {
         document.open();
@@ -75,7 +81,9 @@
         if (form.hasAttribute('data-login-form')) {
           if (form.dataset.submitting === 'true') return;
           showAuthLoading(form);
-          submitLoginWithTimeout(form);
+          window.setTimeout(function () {
+            form.submit();
+          }, 300);
           return;
         }
         showAuthLoading(form);

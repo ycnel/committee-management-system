@@ -66,7 +66,7 @@ include __DIR__ . '/../layouts/header.php';
   </div>
 
 <div class="modal fade" id="userModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-xl">
     <div class="modal-content">
       <form id="userForm">
         <?= csrfField() ?>
@@ -105,6 +105,43 @@ include __DIR__ . '/../layouts/header.php';
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
+          </div>
+
+          <hr class="my-4">
+          <h6 class="text-primary mb-3"><i class="bi bi-mortarboard"></i> Educational Background</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Highest Educational Attainment</label>
+              <select name="highest_education" id="us_highest_education" class="form-select">
+                <option value="">-- Select --</option>
+                <option>High School</option><option>Vocational/Technical</option>
+                <option>Associate Degree</option><option>Bachelor's Degree</option>
+                <option>Master's Degree</option><option>Doctorate</option><option>Other</option>
+              </select>
+            </div>
+            <div class="col-md-6"><label class="form-label">Degree/Course</label><input type="text" name="degree_course" id="us_degree_course" class="form-control" maxlength="255"></div>
+            <div class="col-md-6"><label class="form-label">School/University</label><input type="text" name="school_university" id="us_school_university" class="form-control" maxlength="255"></div>
+            <div class="col-md-6"><label class="form-label">Major/Specialization</label><input type="text" name="major_specialization" id="us_major_specialization" class="form-control" maxlength="255"></div>
+            <div class="col-12"><label class="form-label">Relevant Certifications or Training</label><textarea name="certifications_training" id="us_certifications_training" class="form-control" rows="2" placeholder="One certification or training per line"></textarea></div>
+          </div>
+
+          <h6 class="text-primary mt-4 mb-3"><i class="bi bi-briefcase"></i> Professional Background</h6>
+          <div class="row g-3">
+            <div class="col-md-8"><label class="form-label">Current/Previous Profession</label><input type="text" name="current_profession" id="us_current_profession" class="form-control" maxlength="255"></div>
+            <div class="col-md-4"><label class="form-label">Years of Experience</label><input type="number" name="years_experience" id="us_years_experience" class="form-control" min="0" max="100"></div>
+            <div class="col-md-6"><label class="form-label">Previous Positions/Roles</label><textarea name="previous_positions" id="us_previous_positions" class="form-control" rows="2"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Relevant Organizations/Institutions</label><textarea name="previous_organizations" id="us_previous_organizations" class="form-control" rows="2"></textarea></div>
+            <div class="col-12"><label class="form-label">Government/Legislative Experience</label><textarea name="government_experience" id="us_government_experience" class="form-control" rows="2"></textarea></div>
+          </div>
+
+          <h6 class="text-primary mt-4 mb-3"><i class="bi bi-lightbulb"></i> Field Expertise</h6>
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Primary Field of Expertise</label><input type="text" name="primary_expertise" id="us_primary_expertise" class="form-control" maxlength="255" placeholder="e.g. Public Administration, Finance"></div>
+            <div class="col-md-6"><label class="form-label">Secondary Fields of Expertise</label><input type="text" name="secondary_expertise" id="us_secondary_expertise" class="form-control" placeholder="Separate fields with commas"></div>
+            <div class="col-md-6"><label class="form-label">Areas of Knowledge</label><textarea name="knowledge_areas" id="us_knowledge_areas" class="form-control" rows="2"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Relevant Skills</label><textarea name="relevant_skills" id="us_relevant_skills" class="form-control" rows="2"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Legislative/Committee Expertise</label><textarea name="committee_expertise" id="us_committee_expertise" class="form-control" rows="2"></textarea></div>
+            <div class="col-md-6"><label class="form-label">Expertise Keywords/Tags</label><textarea name="expertise_keywords" id="us_expertise_keywords" class="form-control" rows="2" placeholder="e.g. infrastructure, budgeting, governance"></textarea></div>
           </div>
         </div>
         <div class="modal-footer">

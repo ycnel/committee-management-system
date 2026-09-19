@@ -4,8 +4,8 @@
  * Powers modules/workload/index.php: live AJAX search/filter/sort/
  * pagination, the Assign Task modal — including the "Generate with
  * AI" flow (Task Title -> Google Gemini -> auto-filled, fully editable
- * Description/Assign To/Priority/Workload Points/Due Date/Status) —
- * and the quick "mark completed" action.
+ * Description/Assign To/Priority/Due Date) —
+ * and assignment recommendations.
  * ------------------------------------------------------------------
  */
 
@@ -60,16 +60,6 @@
     wrap.querySelectorAll('.btn-edit-task').forEach(btn => {
       btn.addEventListener('click', () => openEditModal(btn.getAttribute('data-id')));
     });
-    wrap.querySelectorAll('.btn-complete-task').forEach(btn => {
-      btn.addEventListener('click', function () {
-        const csrfToken = window.APP_CSRF_TOKEN || '';
-        appPost(window.APP_URL + '/modules/workload/ajax_complete.php', { id: btn.getAttribute('data-id'), csrf_token: csrfToken })
-          .then(data => {
-            if (data.success) { appToast('success', data.message); loadTable(); }
-            else if (!data.session_expired) { Swal.fire('Error', data.message, 'error'); }
-          });
-      });
-    });
   }
 
   function bindCommitteeCards() {
@@ -107,9 +97,7 @@
   const memberSelect = document.getElementById('wl_member');
   const descriptionInput = document.getElementById('wl_description');
   const prioritySelect = document.getElementById('wl_priority');
-  const pointsInput = document.getElementById('wl_points');
   const dueInput = document.getElementById('wl_due');
-  const statusSelect = document.getElementById('wl_status');
   const aiRecIdInput = document.getElementById('wl_ai_recommendation_id');
 
   const btnGenerate = document.getElementById('btnGenerateAI');
@@ -206,6 +194,12 @@
     return 'bg-info text-dark';
   }
 
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, function (character) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[character];
+    });
+  }
+
   function renderAIResult(result) {
     aiPanelWrap.style.display = 'block';
 
@@ -225,16 +219,35 @@
 
     const member = findMember(result.members || [], result.recommended_member_id);
     const memberLabel = member ? (member.name + ' (' + member.role + ')') : ('Member #' + result.recommended_member_id);
+    const background = member && member.background ? member.background : {};
+    const expertise = [background.primary_expertise, background.secondary_expertise, background.committee_expertise]
+      .filter(value => value).join(', ') || 'No background expertise recorded';
+    const experience = [
+      background.years_experience ? background.years_experience + ' year(s)' : '',
+      background.current_profession,
+      background.degree_course,
+    ].filter(value => value).join(' | ') || 'No professional or educational background recorded';
+    const workload = member
+      ? (member.active_assignments + ' current assignment(s), ' + member.active_committees + ' active committee(s)')
+      : 'Unavailable';
 
     aiSummary.innerHTML =
       '<div class="d-flex flex-wrap gap-2 align-items-center">' +
-        '<span><i class="bi bi-person-check text-success"></i> <strong>' + memberLabel + '</strong></span>' +
+        '<span><i class="bi bi-person-check text-success"></i> <strong>' + escapeHtml(memberLabel) + '</strong></span>' +
         '<span class="badge ' + priorityBadgeClass(result.priority) + '">' + (result.priority || '—') + ' Priority</span>' +
-        '<span class="badge bg-light text-dark border">' + (result.workload_points ?? '—') + ' pts</span>' +
         '<span class="badge bg-light text-dark border"><i class="bi bi-calendar-event"></i> Due ' + (result.due_date || '—') + '</span>' +
-        '<span class="badge bg-light text-dark border">' + (result.status || '—') + '</span>' +
+      '</div>' +
+      '<div class="mt-2"><strong>Relevant expertise:</strong> ' + escapeHtml(expertise) + '</div>' +
+      '<div><strong>Relevant education/experience:</strong> ' + escapeHtml(experience) + '</div>' +
+      '<div><strong>Current workload:</strong> ' + escapeHtml(workload) + '</div>' +
+      '<div class="d-flex flex-wrap gap-2 mt-2 small">' +
+        '<span class="badge bg-light text-dark border">Expertise ' + (result.expertise_match ?? '—') + '/100</span>' +
+        '<span class="badge bg-light text-dark border">Experience ' + (result.experience_match ?? '—') + '/100</span>' +
+        '<span class="badge bg-light text-dark border">Workload ' + (result.workload_factor ?? '—') + '/100</span>' +
+        '<span class="badge bg-light text-dark border">Committee relevance ' + (result.committee_relevance ?? '—') + '/100</span>' +
+        '<span class="badge bg-primary">Overall relevance ' + (result.overall_relevance ?? '—') + '/100</span>' +
       '</div>';
-    aiReasoning.innerHTML = result.reasoning ? ('<i class="bi bi-info-circle"></i> ' + result.reasoning) : '';
+    aiReasoning.innerHTML = result.reasoning ? ('<i class="bi bi-info-circle"></i> ' + escapeHtml(result.reasoning)) : '';
 
     // ---- Populate the actual editable form fields ----
     if (member) {
@@ -242,8 +255,6 @@
       memberSelect.value = String(result.recommended_member_id);
     }
     if (result.priority) prioritySelect.value = result.priority;
-    if (result.status) statusSelect.value = result.status;
-    if (result.workload_points) pointsInput.value = result.workload_points;
     if (result.due_date) dueInput.value = result.due_date;
     if (result.description) {
       descriptionInput.value = result.description;
@@ -254,7 +265,7 @@
   }
 
   // Once the admin edits the AI-written description themselves, the
-  // "AI Generated by Gemini" badge no longer applies to what's there.
+  // generated-content badge no longer applies to what's there.
   descriptionInput.addEventListener('input', function () {
     aiDescBadge.style.display = 'none';
   });
@@ -293,6 +304,8 @@
     const params = new URLSearchParams();
     params.set('committee_id', committeeId);
     params.set('task_title', taskTitle);
+    params.set('task_description', descriptionInput.value.trim());
+    params.set('priority', prioritySelect.value);
 
     appGet(window.APP_URL + '/modules/workload/ajax_ai_recommend.php?' + params.toString())
       .then(data => {
@@ -349,7 +362,6 @@
     addBtn.addEventListener('click', function () {
       form.reset();
       document.getElementById('wl_id').value = 0;
-      statusSelect.value = 'Pending';
       memberSelect.innerHTML = '<option value="">-- Select Committee First --</option>';
       aiPanelWrap.style.display = 'none';
       aiLoading.style.display = 'none';
@@ -379,9 +391,7 @@
       titleInput.value = t.task_title || '';
       descriptionInput.value = t.task_description || '';
       prioritySelect.value = t.priority || 'Medium';
-      pointsInput.value = t.workload_points || 1;
       dueInput.value = t.due_date || '';
-      statusSelect.value = t.status || 'Pending';
       committeeSelect.value = t.committee_id;
       loadMembers(t.committee_id, t.committee_member_id);
       aiPanelWrap.style.display = 'none';

@@ -2,8 +2,7 @@
 /**
  * modules/workload/table.php
  * ------------------------------------------------------------------
- * Filtered/sorted/paginated workload_assignments table (Pending
- * Tasks / Completed Tasks views live here via the status filter).
+ * Filtered/sorted/paginated assignment table.
  * ------------------------------------------------------------------
  */
 
@@ -11,10 +10,9 @@ $pdo = db();
 
 $search      = clean($_GET['search'] ?? '');
 $committeeId = (int)($_GET['committee_id'] ?? 0);
-$statusFil   = clean($_GET['status'] ?? '');
 $priorityFil = clean($_GET['priority'] ?? '');
 
-$sortableColumns = ['task_title', 'priority', 'status', 'due_date', 'workload_points'];
+$sortableColumns = ['task_title', 'priority', 'due_date'];
 $sortBy  = in_array($_GET['sort'] ?? '', $sortableColumns, true) ? $_GET['sort'] : 'due_date';
 $sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
 
@@ -22,7 +20,6 @@ $where = [];
 $params = [];
 if ($search !== '') { $where[] = 'wa.task_title LIKE :s'; $params[':s'] = '%' . $search . '%'; }
 if ($committeeId > 0) { $where[] = 'c.committee_id = :cid'; $params[':cid'] = $committeeId; }
-if ($statusFil !== '') { $where[] = 'wa.status = :status'; $params[':status'] = $statusFil; }
 if ($priorityFil !== '') { $where[] = 'wa.priority = :priority'; $params[':priority'] = $priorityFil; }
 // Committee Member: view only tasks assigned to them, never other members' tasks.
 if (isCommitteeMember()) { $where[] = 'cm.user_id = :uid'; $params[':uid'] = currentUserId(); }
@@ -50,16 +47,13 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
-$statusColors   = ['Pending' => 'secondary', 'In Progress' => 'warning', 'Completed' => 'success', 'Overdue' => 'danger'];
 $priorityColors = ['Low' => 'success', 'Medium' => 'info', 'High' => 'warning', 'Urgent' => 'danger'];
 ?>
 <div class="workload-list-toolbar">
   <span class="small text-muted">Sort tasks by:</span>
   <a href="#" class="sort-link" data-sort="task_title">Title <i class="bi bi-arrow-down-up sort-icon"></i></a>
   <a href="#" class="sort-link" data-sort="priority">Priority <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="workload_points">Points <i class="bi bi-arrow-down-up sort-icon"></i></a>
   <a href="#" class="sort-link" data-sort="due_date">Due date <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="status">Status <i class="bi bi-arrow-down-up sort-icon"></i></a>
 </div>
 
 <?php if (empty($rows)): ?>
@@ -74,17 +68,14 @@ $priorityColors = ['Low' => 'success', 'Medium' => 'info', 'High' => 'warning', 
 <?php else: ?>
   <div class="workload-card-grid">
     <?php foreach ($rows as $r):
-      $isOverdue = $r['status'] !== 'Completed' && $r['due_date'] && $r['due_date'] < date('Y-m-d');
     ?>
       <article class="workload-task-card">
         <div class="workload-task-card-inner">
           <div class="workload-task-topline">
             <span class="workload-task-committee"><i class="bi bi-diagram-3"></i> <?= e($r['committee_name']) ?></span>
-            <span class="workload-task-points"><?= (int)$r['workload_points'] ?> pts</span>
           </div>
-          <div class="workload-task-date <?= $isOverdue ? 'is-overdue' : '' ?>">
+          <div class="workload-task-date">
             <?= $r['due_date'] ? formatDate($r['due_date']) : 'No due date' ?>
-            <?= $isOverdue ? '<i class="bi bi-exclamation-triangle-fill" title="Overdue"></i>' : '' ?>
           </div>
           <h3 class="workload-task-title"><?= e($r['task_title']) ?></h3>
           <p class="workload-task-description">
@@ -92,15 +83,11 @@ $priorityColors = ['Low' => 'success', 'Medium' => 'info', 'High' => 'warning', 
           </p>
           <div class="workload-task-tags">
             <span class="workload-task-tag priority-<?= e(strtolower($r['priority'])) ?>"><?= e($r['priority']) ?></span>
-            <span class="workload-task-tag status-<?= e(strtolower(str_replace(' ', '-', $r['status']))) ?>"><?= e($r['status']) ?></span>
           </div>
           <div class="workload-task-bottomline">
             <span><i class="bi bi-person"></i> <?= e($r['member_name']) ?></span>
             <?php if (canManage()): ?>
               <div class="workload-task-actions">
-                <?php if ($r['status'] !== 'Completed'): ?>
-                  <button type="button" class="workload-action-button btn-complete-task" data-id="<?= (int)$r['workload_id'] ?>" title="Mark completed"><i class="bi bi-check2"></i></button>
-                <?php endif; ?>
                 <button type="button" class="workload-action-button btn-edit-task" data-id="<?= (int)$r['workload_id'] ?>" title="Edit task"><i class="bi bi-pencil-square"></i></button>
                 <button type="button" class="workload-action-button" data-confirm-delete="task &quot;<?= e($r['task_title']) ?>&quot;" data-delete-url="<?= e(APP_URL) ?>/modules/workload/ajax_delete.php?id=<?= (int)$r['workload_id'] ?>" title="Delete task"><i class="bi bi-trash"></i></button>
               </div>

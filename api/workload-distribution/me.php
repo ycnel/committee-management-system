@@ -35,7 +35,7 @@ $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 $stmt = $pdo->prepare(
     "SELECT wa.workload_id, wa.task_title, wa.task_description, wa.priority,
-            wa.workload_points, wa.assigned_date, wa.due_date,
+            wa.assigned_date, wa.due_date,
             wa.completion_date, wa.status, cm.committee_id,
             c.committee_name, cm.user_id AS assigned_user_id
      FROM workload_assignments wa

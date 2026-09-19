@@ -132,6 +132,12 @@
       document.getElementById('jd_name').value = j.jurisdiction_name || '';
       document.getElementById('jd_category').value = j.category || '';
       document.getElementById('jd_description').value = j.description || '';
+      document.getElementById('jd_scope_definition').value = j.scope_definition || '';
+      document.getElementById('jd_covered_areas').value = j.covered_areas || '';
+      document.getElementById('jd_primary_responsibilities').value = j.primary_responsibilities || '';
+      document.getElementById('jd_typical_legislative_matters').value = j.typical_legislative_matters || '';
+      document.getElementById('jd_outside_scope').value = j.outside_scope || '';
+      document.getElementById('jd_notes').value = j.notes || '';
       document.getElementById('jd_status').value = j.status || 'Active';
       goToJurisdictionStep(1);
       document.getElementById('jurisdictionModalTitle').innerHTML = '<i class="bi bi-pencil-square"></i> Edit Jurisdiction';
@@ -147,4 +153,7 @@
         else if (!data.session_expired) { Swal.fire('Error', data.message, 'error'); }
       });
   });
+
+  const editId = new URLSearchParams(window.location.search).get('edit');
+  if (editId) openEditModal(editId);
 })();

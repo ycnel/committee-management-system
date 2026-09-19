@@ -3,13 +3,8 @@
  * modules/workload/index.php
  * ------------------------------------------------------------------
  * Smart Workload Distribution module (Module 4). Shows workload
- * summary widgets, a per-committee "who's least busy" recommendation
- * panel, and the full task list (Pending/Completed Tasks) with a
- * Create/Edit modal. The Assign Task modal includes a "Generate with
- * AI" flow: the admin types a Task Title, clicks Generate, and local
- * Google Gemini AI fills in Description, Assign To, Priority, Workload
- * Points, Due Date and Status from real committee/member data —
- * every field stays fully editable afterward.
+ * assignment distribution, a per-committee member assignment count,
+ * and the full assignment list with a Create/Edit modal.
  * ------------------------------------------------------------------
  */
 
@@ -19,6 +14,166 @@ requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]);
 $pageTitle  = 'Lungsod ng Manila Committee Management and Assignment System';
 $activeMenu = 'workload';
 $pdo = db();
+$selectedJurisdictionId = (int)($_GET['jurisdiction_id'] ?? 0);
+$selectedCommitteeId = (int)($_GET['committee_id'] ?? 0);
+
+if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
+    $jurisdictionStmt = $pdo->prepare(
+        "SELECT jurisdiction_id, jurisdiction_name, category, description
+         FROM jurisdictions
+         WHERE jurisdiction_id = :id AND status = 'Active'
+         LIMIT 1"
+    );
+    $jurisdictionStmt->execute([':id' => $selectedJurisdictionId]);
+    $selectedJurisdiction = $jurisdictionStmt->fetch();
+
+    if (!$selectedJurisdiction) {
+        setFlash('danger', 'Jurisdiction not found.');
+        redirect(APP_URL . '/modules/workload/index.php');
+    }
+
+    if (isCommitteeMember()) {
+        $jurisdictionCommitteesStmt = $pdo->prepare(
+            "SELECT c.committee_id, c.committee_name, c.description, c.status
+             FROM committees c
+             INNER JOIN committee_members cm ON cm.committee_id = c.committee_id
+             WHERE c.jurisdiction_id = :jurisdiction_id
+               AND c.status = 'Active' AND cm.user_id = :user_id AND cm.status = 'Active'
+             ORDER BY c.committee_name"
+        );
+        $jurisdictionCommitteesStmt->execute([
+            ':jurisdiction_id' => $selectedJurisdictionId,
+            ':user_id' => currentUserId(),
+        ]);
+    } else {
+        $jurisdictionCommitteesStmt = $pdo->prepare(
+            "SELECT committee_id, committee_name, description, status
+             FROM committees
+             WHERE jurisdiction_id = :jurisdiction_id AND status = 'Active'
+             ORDER BY committee_name"
+        );
+        $jurisdictionCommitteesStmt->execute([':jurisdiction_id' => $selectedJurisdictionId]);
+    }
+    $jurisdictionCommittees = $jurisdictionCommitteesStmt->fetchAll();
+
+    include __DIR__ . '/../../layouts/header.php';
+    ?>
+    <div class="app-wrapper">
+      <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
+      <div class="main-content">
+        <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
+        <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <nav aria-label="breadcrumb" class="mb-1">
+              <ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="index.php">Workload Distribution</a></li>
+                <li class="breadcrumb-item active"><?= e($selectedJurisdiction['jurisdiction_name']) ?></li>
+              </ol>
+            </nav>
+            <h5 class="mb-0"><i class="bi bi-geo-alt text-primary"></i> <?= e($selectedJurisdiction['jurisdiction_name']) ?></h5>
+            <small class="text-muted">Select a committee to view its workload distribution and tasks.</small>
+          </div>
+          <a href="index.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to Jurisdictions</a>
+        </div>
+
+        <section class="workload-committee-panel" aria-labelledby="jurisdictionCommitteeHeading">
+          <div class="workload-section-heading">
+            <div>
+              <h6 id="jurisdictionCommitteeHeading" class="mb-1">Committees under this jurisdiction</h6>
+              <p class="small text-muted mb-0"><?= e($selectedJurisdiction['description'] ?: 'Choose a committee to continue.') ?></p>
+            </div>
+            <span class="badge bg-light text-dark border"><?= count($jurisdictionCommittees) ?> committee<?= count($jurisdictionCommittees) === 1 ? '' : 's' ?></span>
+          </div>
+          <?php if (empty($jurisdictionCommittees)): ?>
+            <p class="text-muted small mb-0">No active committees are associated with this jurisdiction.</p>
+          <?php else: ?>
+            <div class="workload-committee-grid">
+              <?php foreach ($jurisdictionCommittees as $committee): ?>
+                <a href="committee.php?committee_id=<?= (int)$committee['committee_id'] ?>" class="workload-committee-card">
+                  <span class="workload-committee-inner">
+                    <span class="workload-committee-form" aria-label="Committee icon"><i class="bi bi-people-fill workload-committee-card-icon"></i></span>
+                    <span class="workload-committee-data">
+                      <span class="workload-committee-text">
+                        <span class="workload-committee-card-name"><?= e($committee['committee_name']) ?></span>
+                        <span class="workload-committee-card-description"><?= e($committee['description'] ?: 'View tasks, assignments, priorities, and due dates for this committee.') ?></span>
+                      </span>
+                    </span>
+                  </span>
+                </a>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </section>
+      </div>
+    </div>
+    <?php
+    include __DIR__ . '/../../layouts/footer.php';
+    exit;
+}
+
+if ($selectedJurisdictionId <= 0 && $selectedCommitteeId <= 0) {
+    if (isCommitteeMember()) {
+        $jurisdictionsStmt = $pdo->prepare(
+            "SELECT DISTINCT j.jurisdiction_id, j.jurisdiction_name, j.category, j.description,
+                    (SELECT COUNT(*) FROM committees c2 WHERE c2.jurisdiction_id = j.jurisdiction_id AND c2.status = 'Active') AS committee_count
+             FROM jurisdictions j
+             INNER JOIN committees c ON c.jurisdiction_id = j.jurisdiction_id AND c.status = 'Active'
+             INNER JOIN committee_members cm ON cm.committee_id = c.committee_id
+             WHERE j.status = 'Active' AND cm.user_id = :user_id AND cm.status = 'Active'
+             ORDER BY j.jurisdiction_name"
+        );
+        $jurisdictionsStmt->execute([':user_id' => currentUserId()]);
+    } else {
+        $jurisdictionsStmt = $pdo->query(
+            "SELECT j.jurisdiction_id, j.jurisdiction_name, j.category, j.description,
+                    (SELECT COUNT(*) FROM committees c WHERE c.jurisdiction_id = j.jurisdiction_id AND c.status = 'Active') AS committee_count
+             FROM jurisdictions j
+             WHERE j.status = 'Active'
+             ORDER BY j.jurisdiction_name"
+        );
+    }
+    $workloadJurisdictions = $jurisdictionsStmt->fetchAll();
+
+    include __DIR__ . '/../../layouts/header.php';
+    ?>
+    <div class="app-wrapper">
+      <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
+      <div class="main-content">
+        <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
+        <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h5 class="mb-0"><i class="bi bi-bar-chart-steps text-primary"></i> Smart Workload Distribution</h5>
+            <small class="text-muted">Start by selecting a jurisdiction to view its committees and workload.</small>
+          </div>
+          <?php if (canEditAiSettings()): ?><a href="ai_settings.php" class="btn btn-outline-primary btn-sm"><i class="bi bi-stars"></i> Smart AI Settings</a><?php endif; ?>
+        </div>
+        <section class="workload-committee-panel" aria-labelledby="workloadJurisdictionHeading">
+          <div class="workload-section-heading">
+            <div><h6 id="workloadJurisdictionHeading" class="mb-1">Choose a jurisdiction</h6><p class="small text-muted mb-0">Jurisdictions are shown using the existing CMAS jurisdiction card design.</p></div>
+          </div>
+          <?php if (empty($workloadJurisdictions)): ?>
+            <p class="text-muted small mb-0">No active jurisdictions are available.</p>
+          <?php else: ?>
+            <div class="jurisdiction-card-grid">
+              <?php foreach ($workloadJurisdictions as $jurisdiction): ?>
+                <a href="index.php?jurisdiction_id=<?= (int)$jurisdiction['jurisdiction_id'] ?>" class="jurisdiction-card text-decoration-none" aria-label="View <?= e($jurisdiction['jurisdiction_name']) ?> workload">
+                  <div class="jurisdiction-card-details">
+                    <div class="jurisdiction-card-meta"><span><?= e($jurisdiction['category'] ?: 'General scope') ?></span><span><?= (int)$jurisdiction['committee_count'] ?> committee<?= (int)$jurisdiction['committee_count'] === 1 ? '' : 's' ?></span></div>
+                    <div class="jurisdiction-card-title"><?= e($jurisdiction['jurisdiction_name']) ?></div>
+                    <div class="jurisdiction-card-description"><?= e(truncate($jurisdiction['description'] ?: 'Select to view associated committees and workloads.', 110)) ?></div>
+                    <div class="jurisdiction-card-footer"><span class="jurisdiction-card-status status-active">Active</span><span class="jurisdiction-action-button"><i class="bi bi-arrow-right"></i></span></div>
+                  </div>
+                </a>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </section>
+      </div>
+    </div>
+    <?php
+    include __DIR__ . '/../../layouts/footer.php';
+    exit;
+}
 
 if (isCommitteeMember()) {
   $committeeStmt = $pdo->prepare(
@@ -33,7 +188,6 @@ if (isCommitteeMember()) {
 } else {
   $committees = $pdo->query("SELECT committee_id, committee_name FROM committees WHERE status = 'Active' ORDER BY committee_name")->fetchAll();
 }
-$selectedCommitteeId = (int)($_GET['committee_id'] ?? 0);
 $selectedCommitteeName = '';
 foreach ($committees as $committee) {
   if ((int)$committee['committee_id'] === $selectedCommitteeId) {
@@ -45,16 +199,10 @@ if (isCommitteeMember() && $selectedCommitteeId > 0 && $selectedCommitteeName ==
   $selectedCommitteeId = 0;
 }
 
-// ---- Summary widgets --------------------------------------------------
-// Committee Member sees only their OWN workload counts; Administrator and
-// Committee Chairperson see the full system-wide counts (unchanged).
+// ---- Assignment summary ----------------------------------------------
 if (isCommitteeMember()) {
     $summaryStmt = $pdo->prepare(
-        "SELECT
-            SUM(CASE WHEN wa.status = 'Pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN wa.status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-            SUM(CASE WHEN wa.status = 'Completed' THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN wa.status = 'Overdue' OR (wa.status IN ('Pending','In Progress') AND wa.due_date IS NOT NULL AND wa.due_date < CURDATE()) THEN 1 ELSE 0 END) AS overdue
+    "SELECT COUNT(wa.workload_id) AS total_assignments
          FROM workload_assignments wa
          INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
          WHERE cm.user_id = :uid"
@@ -62,35 +210,24 @@ if (isCommitteeMember()) {
     $summaryStmt->execute([':uid' => currentUserId()]);
     $summary = $summaryStmt->fetch();
 } else {
-    $summary = $pdo->query(
-        "SELECT
-            SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN status = 'Overdue' OR (status IN ('Pending','In Progress') AND due_date IS NOT NULL AND due_date < CURDATE()) THEN 1 ELSE 0 END) AS overdue
-         FROM workload_assignments"
-    )->fetch();
+  $summary = $pdo->query("SELECT COUNT(*) AS total_assignments FROM workload_assignments")->fetch();
 }
-$summary = $summary ?: ['pending' => 0, 'in_progress' => 0, 'completed' => 0, 'overdue' => 0];
+$summary = $summary ?: ['total_assignments' => 0];
 
 $committeeTaskSummary = null;
 if ($selectedCommitteeId > 0) {
     $committeeTaskSummaryStmt = $pdo->prepare(
-        "SELECT
-            SUM(CASE WHEN wa.status = 'Pending' THEN 1 ELSE 0 END) AS pending,
-            SUM(CASE WHEN wa.status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
-            SUM(CASE WHEN wa.status = 'Completed' THEN 1 ELSE 0 END) AS completed,
-            SUM(CASE WHEN wa.status = 'Overdue' OR (wa.status IN ('Pending','In Progress') AND wa.due_date IS NOT NULL AND wa.due_date < CURDATE()) THEN 1 ELSE 0 END) AS overdue
+      "SELECT COUNT(wa.workload_id) AS total_assignments
          FROM workload_assignments wa
          INNER JOIN committee_members cm ON cm.committee_member_id = wa.committee_member_id
             WHERE cm.committee_id = :cid
            AND (:is_manager = 1 OR cm.user_id = :uid)"
     );
           $committeeTaskSummaryStmt->execute([':cid' => $selectedCommitteeId, ':is_manager' => canManage() ? 1 : 0, ':uid' => currentUserId()]);
-    $committeeTaskSummary = $committeeTaskSummaryStmt->fetch() ?: ['pending' => 0, 'in_progress' => 0, 'completed' => 0, 'overdue' => 0];
+    $committeeTaskSummary = $committeeTaskSummaryStmt->fetch() ?: ['total_assignments' => 0];
 }
 
-// ---- Recommendation panel: workload points per active member --------
+// ---- Recommendation panel: factual active-assignment counts -----------
 // This cross-member comparison is a task-assignment decision-support tool
 // for Administrator (view) and Committee Chairperson (use) only. Committee
 // Member does not get this view -- they only ever see their own workload.
@@ -99,14 +236,13 @@ $recommendations = [];
 if ($recCommittee > 0 && !isCommitteeMember()) {
     $recStmt = $pdo->prepare(
         "SELECT cm.committee_member_id, u.full_name, cm.member_role,
-                COALESCE(SUM(CASE WHEN wa.status IN ('Pending','In Progress') THEN wa.workload_points ELSE 0 END), 0) AS active_points,
-                COUNT(CASE WHEN wa.status IN ('Pending','In Progress') THEN 1 END) AS active_tasks
+                COUNT(wa.workload_id) AS active_assignments
          FROM committee_members cm
          INNER JOIN users u ON u.id = cm.user_id
          LEFT JOIN workload_assignments wa ON wa.committee_member_id = cm.committee_member_id
          WHERE cm.committee_id = :cid AND cm.status = 'Active'
          GROUP BY cm.committee_member_id, u.full_name, cm.member_role
-         ORDER BY active_points ASC, active_tasks ASC"
+         ORDER BY active_tasks ASC"
     );
     $recStmt->execute([':cid' => $recCommittee]);
     $recommendations = $recStmt->fetchAll();
@@ -143,32 +279,8 @@ include __DIR__ . '/../../layouts/header.php';
     <div class="col-6 col-md-3">
       <div class="card stat-card bg-gov-blue">
         <div class="card-body"><i class="bi bi-hourglass-split stat-icon"></i>
-          <div class="stat-value"><?= (int)$summary['pending'] ?></div>
-          <div class="stat-label">Pending Tasks</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card bg-gov-amber">
-        <div class="card-body"><i class="bi bi-arrow-repeat stat-icon"></i>
-          <div class="stat-value"><?= (int)$summary['in_progress'] ?></div>
-          <div class="stat-label">In Progress</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card bg-gov-teal">
-        <div class="card-body"><i class="bi bi-check2-circle stat-icon"></i>
-          <div class="stat-value"><?= (int)$summary['completed'] ?></div>
-          <div class="stat-label">Completed Tasks</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card stat-card bg-gov-red">
-        <div class="card-body"><i class="bi bi-exclamation-triangle stat-icon"></i>
-          <div class="stat-value"><?= (int)$summary['overdue'] ?></div>
-          <div class="stat-label">Overdue</div>
+              <div class="stat-value"><?= (int)$summary['total_assignments'] ?></div>
+            <div class="stat-label">Assigned Tasks</div>
         </div>
       </div>
     </div>
@@ -207,14 +319,12 @@ include __DIR__ . '/../../layouts/header.php';
                   </div>
                   <div class="text-muted small"><?= e($r['member_role']) ?> &middot; <?= (int)$r['active_tasks'] ?> active task(s)</div>
                 </div>
-                <span class="badge bg-<?= $i === 0 ? 'success' : 'secondary' ?> rounded-pill"><?= (int)$r['active_points'] ?> pts</span>
               </div>
             </div>
           <?php endforeach; ?>
         </div>
         <p class="small text-muted mt-2 mb-0">
-          <i class="bi bi-info-circle"></i> Recommendation is based on total workload points of currently Pending/In Progress
-          tasks — the member with the lowest active load is highlighted first.
+          <i class="bi bi-info-circle"></i> Recommendation is based on recorded assignment counts and member background data.
         </p>
       <?php endif; ?>
     </div>
@@ -270,12 +380,6 @@ include __DIR__ . '/../../layouts/header.php';
           </div>
           
           <div class="col-md-2">
-            <select class="form-select form-select-sm" name="status">
-              <option value="">All Statuses</option>
-              <?php foreach (['Pending', 'In Progress', 'Completed', 'Overdue'] as $s): ?>
-                <option value="<?= e($s) ?>"><?= e($s) ?></option>
-              <?php endforeach; ?>
-            </select>
           </div>
           <div class="col-md-3">
             <select class="form-select form-select-sm" name="priority">
@@ -294,24 +398,12 @@ include __DIR__ . '/../../layouts/header.php';
         <div class="workload-mini-overview">
           <div class="workload-mini-overview-header">
             <span class="workload-mini-title"><?= e($selectedCommitteeName ?: 'Selected committee') ?></span>
-            <span class="workload-mini-subtitle">Task overview</span>
+            <span class="workload-mini-subtitle">Assignment overview</span>
           </div>
           <div class="workload-mini-stat-grid">
-            <div class="workload-mini-stat workload-mini-stat-completed">
-              <span>Completed</span>
-              <strong><?= (int)($committeeTaskSummary['completed'] ?? 0) ?></strong>
-            </div>
-            <div class="workload-mini-stat workload-mini-stat-overdue">
-              <span>Overdue</span>
-              <strong><?= (int)($committeeTaskSummary['overdue'] ?? 0) ?></strong>
-            </div>
-            <div class="workload-mini-stat workload-mini-stat-progress">
-              <span>In Progress</span>
-              <strong><?= (int)($committeeTaskSummary['in_progress'] ?? 0) ?></strong>
-            </div>
             <div class="workload-mini-stat workload-mini-stat-pending">
-              <span>Pending</span>
-              <strong><?= (int)($committeeTaskSummary['pending'] ?? 0) ?></strong>
+              <span>Assigned</span>
+              <strong><?= (int)($committeeTaskSummary['total_assignments'] ?? 0) ?></strong>
             </div>
           </div>
         </div>
@@ -370,7 +462,6 @@ include __DIR__ . '/../../layouts/header.php';
             <div class="row g-3">
               <div class="col-md-6"><label class="form-label">Assign To <span class="text-danger">*</span></label><select name="committee_member_id" id="wl_member" class="form-select" required><option value="">-- Select Committee First --</option></select></div>
               <div class="col-md-3"><label class="form-label">Priority</label><select name="priority" id="wl_priority" class="form-select"><?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?><option value="<?= e($p) ?>" <?= $p === 'Medium' ? 'selected' : '' ?>><?= e($p) ?></option><?php endforeach; ?></select></div>
-              <div class="col-md-3"><label class="form-label">Status</label><select name="status" id="wl_status" class="form-select"><?php foreach (['Pending', 'In Progress', 'Completed', 'Overdue'] as $s): ?><option value="<?= e($s) ?>"><?= e($s) ?></option><?php endforeach; ?></select></div>
             </div>
           </section>
 
@@ -378,8 +469,7 @@ include __DIR__ . '/../../layouts/header.php';
             <div class="task-step-heading"><span class="task-step-kicker">Step 3</span><h6>Review and save</h6><p>Complete the details, then save the assignment.</p></div>
             <div class="mt-3" id="wl_ai_panel_wrap" style="display:none;"><div class="task-ai-result"><div class="d-flex justify-content-between align-items-center"><span class="small fw-semibold text-primary"><i class="bi bi-cpu"></i> AI Recommendation</span><span id="wl_ai_error_badge" class="badge bg-warning text-dark" style="display:none;"></span></div><div id="wl_ai_summary" class="small mt-2"></div><div id="wl_ai_reasoning" class="small text-muted mt-2 fst-italic"></div></div></div>
             <div class="row g-3">
-              <div class="col-12"><label class="form-label task-description-label">Description <span id="wl_ai_desc_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle task-ai-badge" style="display:none;"><i class="bi bi-stars"></i> AI Generated by Gemini</span></label><textarea name="task_description" id="wl_description" class="form-control" rows="3" placeholder="Describe the task, or generate one in Step 1."></textarea></div>
-              <div class="col-md-6"><label class="form-label">Workload Points</label><input type="number" name="workload_points" id="wl_points" class="form-control" min="1" max="100" value="1"></div>
+              <div class="col-12"><label class="form-label task-description-label">Description <span id="wl_ai_desc_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle task-ai-badge" style="display:none;"><i class="bi bi-stars"></i> AI Generated</span></label><textarea name="task_description" id="wl_description" class="form-control" rows="3" placeholder="Describe the task, or generate one in Step 1."></textarea></div>
               <div class="col-md-6"><label class="form-label">Due Date</label><input type="date" name="due_date" id="wl_due" class="form-control"></div>
             </div>
           </section>

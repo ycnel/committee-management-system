@@ -375,7 +375,8 @@ if ($sessionReplaced) {
     }
 
     .alert-custom i {
-        font-size:  0.85rem;
+        font-size: 1rem;
+        flex: 0 0 auto;
     }
 
     .alert-custom.alert-warning {
@@ -388,8 +389,7 @@ if ($sessionReplaced) {
         background: #ffe0e0;
         color: #991B1B;
         font-size: 0.80rem;
-        border: 1px solid transparent;
-        
+        border-left-color: #DC2626;
     }
 
     .alert-custom.alert-success {
@@ -718,8 +718,8 @@ if ($sessionReplaced) {
             <?php endif; ?>
 
             <?php foreach ($flashMessages as $msg): ?>
-                <div class="alert-custom alert-<?= e($msg['type']) ?>">
-                    <i class="bi <?= $msg['type'] === 'success' ? 'bi-check-circle' : ($msg['type'] === 'warning' ? 'bi-exclamation-triangle' : 'bi-x-circle') ?>"></i>
+                <div class="alert-custom alert-<?= e($msg['type']) ?>" role="alert">
+                    <i class="bi <?= $msg['type'] === 'success' ? 'bi-check-circle-fill' : ($msg['type'] === 'warning' ? 'bi-exclamation-triangle-fill' : 'bi-exclamation-circle-fill') ?>" aria-hidden="true"></i>
                     <span><?= e($msg['message']) ?></span>
                 </div>
             <?php endforeach; ?>
@@ -828,6 +828,6 @@ if ($sessionReplaced) {
 </div>
 
 <script src="<?= e(vendorAsset('bootstrap/bootstrap.bundle.min.js', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js')) ?>"></script>
-<script src="assets/js/auth-loading.js"></script>
+<script src="assets/js/auth-loading.js?v=<?= (int)filemtime(__DIR__ . '/assets/js/auth-loading.js') ?>"></script>
 </body>
 </html>

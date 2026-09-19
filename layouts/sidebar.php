@@ -22,13 +22,13 @@ $menuItems = [
         'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'committees',    'label' => 'Committee Management',   'icon' => 'bi-diagram-3',      'url' => '/modules/committees/index.php',
-        'roles' => [ROLE_STAFF, ROLE_COMMITTEE]],
+        'roles' => [ROLE_STAFF]],
 
     ['key' => 'workload',      'label' => 'Workload Distribution',  'icon' => 'bi-bar-chart-steps', 'url' => '/modules/workload/index.php',
-        'roles' => [ROLE_STAFF, ROLE_COMMITTEE]],
+        'roles' => [ROLE_STAFF]],
 
     ['key' => 'performance',   'label' => 'Committee Performance',  'icon' => 'bi-graph-up-arrow', 'url' => '/modules/performance/index.php',
-        'roles' => [ROLE_STAFF, ROLE_COMMITTEE]],
+        'roles' => [ROLE_STAFF]],
 
     ['key' => 'jurisdictions', 'label' => 'Jurisdictions',          'icon' => 'bi-scale',          'url' => '/modules/jurisdictions/index.php',
         'roles' => [ROLE_STAFF]],
@@ -37,7 +37,10 @@ $menuItems = [
         'roles' => [ROLE_STAFF]],
 
     ['key' => 'activity_logs', 'label' => 'Activity Logs',          'icon' => 'bi-clock-history',  'url' => '/pages/activity_logs.php',
-      'roles' => [ROLE_ADMIN, ROLE_COMMITTEE]],
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+
+    ['key' => 'profile',       'label' => 'My Profile',              'icon' => 'bi-person-circle',  'url' => '/pages/profile.php',
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'users',         'label' => 'User Management',        'icon' => 'bi-person-gear',    'url' => '/pages/users.php',
         'roles' => [ROLE_ADMIN]],
