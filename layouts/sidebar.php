@@ -14,33 +14,34 @@ $role = currentRole();
 /**
  * Each nav item: key, label, icon, url, roles allowed to see it.
  *
- * Administrator is intentionally limited to system-level administration items.
- * Operational modules remain visible only to committee-management roles.
+ * Administrator gets every operational module (full feature set) plus
+ * its own system-administration items. Committee Member keeps its
+ * read-only subset.
  */
 $menuItems = [
     ['key' => 'dashboard',     'label' => 'Dashboard',              'icon' => 'bi-speedometer2',   'url' => '/dashboard.php',
         'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'committees',    'label' => 'Committee Management',   'icon' => 'bi-diagram-3',      'url' => '/modules/committees/index.php',
-        'roles' => [ROLE_STAFF]],
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'workload',      'label' => 'Workload Distribution',  'icon' => 'bi-bar-chart-steps', 'url' => '/modules/workload/index.php',
-        'roles' => [ROLE_STAFF]],
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'performance',   'label' => 'Committee Performance',  'icon' => 'bi-graph-up-arrow', 'url' => '/modules/performance/index.php',
-        'roles' => [ROLE_STAFF]],
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
 
     ['key' => 'jurisdictions', 'label' => 'Jurisdictions',          'icon' => 'bi-scale',          'url' => '/modules/jurisdictions/index.php',
-        'roles' => [ROLE_STAFF]],
+        'roles' => [ROLE_ADMIN, ROLE_STAFF]],
 
     ['key' => 'committee_reports', 'label' => 'Committee Reports',  'icon' => 'bi-file-earmark-text', 'url' => '/modules/committee_reports/index.php',
-        'roles' => [ROLE_STAFF]],
+        'roles' => [ROLE_ADMIN, ROLE_STAFF]],
 
-    ['key' => 'activity_logs', 'label' => 'Activity Logs',          'icon' => 'bi-clock-history',  'url' => '/pages/activity_logs.php',
-      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+    ['key' => 'reports_analytics', 'label' => 'Reports & Analytics', 'icon' => 'bi-bar-chart-line', 'url' => '/modules/reports/index.php',
+        'roles' => [ROLE_ADMIN, ROLE_STAFF]],
 
-    ['key' => 'profile',       'label' => 'My Profile',              'icon' => 'bi-person-circle',  'url' => '/pages/profile.php',
-      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+    ['key' => 'activity_logs', 'label' => 'Audit Logs',             'icon' => 'bi-clock-history',  'url' => '/pages/activity_logs.php',
+      'roles' => [ROLE_ADMIN]],
 
     ['key' => 'users',         'label' => 'User Management',        'icon' => 'bi-person-gear',    'url' => '/pages/users.php',
         'roles' => [ROLE_ADMIN]],
@@ -60,7 +61,6 @@ $menuItems = [
       <div class="brand-title">Committee <span>Management</span></div>
       <div class="brand-subtitle">& Assigment System</div>
     </div>
-    
   </div>
 
   <!-- Divider -->
@@ -94,13 +94,6 @@ $menuItems = [
     </ul>
   </nav>
 
-  <!-- Toggle Button (Arrow) -->
-  <div class="sidebar-toggle-wrapper">
-    <button class="sidebar-toggle-btn" id="sidebarToggle" aria-label="Toggle Sidebar">
-      <i class="bi bi-chevron-left toggle-icon"></i>
-    </button>
-  </div>
-
   <!-- Footer Section -->
   <div class="sidebar-footer">
     <div class="footer-divider"></div>
@@ -110,6 +103,11 @@ $menuItems = [
     </div>
   </div>
 </aside>
+
+<!-- Edge-mounted collapse toggle: straddles the sidebar's right border at header height -->
+<button class="sidebar-edge-toggle" id="sidebarToggle" aria-label="Toggle Sidebar">
+  <i class="bi bi-chevron-left toggle-icon"></i>
+</button>
 
 <!-- Sidebar Overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -321,11 +319,7 @@ $menuItems = [
 .nav-link:hover .nav-icon-wrapper { color: var(--sb-text-heading); background: transparent; }
 .nav-link.active .nav-icon-wrapper { color: var(--sb-text-heading); background: transparent; }
 
-.sidebar-toggle-wrapper { padding: 8px 16px; display: flex; justify-content: flex-end; transition: all 0.3s ease; }
-.sidebar-toggle-btn { width: 30px; height: 30px; border: 2px solid var(--sb-border); border-radius: 10px; background: var(--sb-active-background); box-shadow: inset 0 -2px 5px rgba(0, 0, 0, 0.28);  color: var(--sb-text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; flex-shrink: 0; }
-.sidebar-toggle-btn:hover { background: var(--sb-surface-2); color: var(--sb-text-heading); border-color: var(--sb-border-strong); }
-.sidebar-toggle-btn .toggle-icon { font-size: 15px;   -webkit-text-stroke: 1px currentColor;
- transition: transform 0.3s ease; }
+
 
 .sidebar.collapsed { width: 72px; }
 .sidebar.collapsed .brand-text, .sidebar.collapsed .nav-label, .sidebar.collapsed .nav-indicator, .sidebar.collapsed .user-badge span, .sidebar.collapsed .sidebar-divider, .sidebar.collapsed .footer-divider, .sidebar.collapsed .brand-subtitle, .sidebar.collapsed .nav-section-label { display: none !important; }
@@ -339,10 +333,6 @@ $menuItems = [
 .sidebar.collapsed .nav-icon-wrapper { width: 24px; height: 24px; font-size: 13.5px; background: transparent !important; }
 .sidebar.collapsed .nav-link:hover .nav-icon-wrapper { color: var(--sb-text-heading) !important; background: transparent !important; }
 .sidebar.collapsed .nav-link.active .nav-icon-wrapper { color: var(--sb-accent) !important; background: transparent !important; }
-.sidebar.collapsed .sidebar-toggle-wrapper { padding: 8px 12px; justify-content: center; }
-.sidebar.collapsed .sidebar-toggle-btn { background: var(--sb-active-background); color: var(--sb-text-muted); }
-.sidebar.collapsed .sidebar-toggle-btn:hover { background: var(--sb-surface-2); color: var(--sb-text-heading); }
-.sidebar.collapsed .sidebar-toggle-btn .toggle-icon { transform: rotate(0deg); }
 .sidebar.collapsed .sidebar-footer { padding: 8px 12px 16px 12px; }
 .sidebar.collapsed .user-badge { justify-content: center; padding: 7px; background: var(--sb-active-background); border: 1px solid var(--sb-border); }
 .sidebar.collapsed .user-badge i { font-size: 15px; color: var(--sb-text-muted); display: flex !important; }
@@ -368,6 +358,21 @@ $menuItems = [
   .sidebar.collapsed { width: 72px; transform: translateX(0); }
   .sidebar-overlay.active { display: block; }
 }
+
+.sidebar-edge-toggle {
+  position: fixed; top: 28px; left: var(--gov-sidebar-width); transform: translate(-50%, -50%);
+  z-index: 1001;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--ln-border, #E5E7EB); background: var(--ln-canvas, #fff);
+  color: var(--primary-blue, #0B2E59); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: left 0.3s ease, background 0.2s ease, color 0.2s ease;
+}
+.sidebar-edge-toggle:hover { background: var(--sb-canvas); color: #fff; border-color: var(--sb-canvas); }
+.sidebar-edge-toggle .toggle-icon { font-size: 13px; }
+.sidebar.collapsed ~ .sidebar-edge-toggle { left: 72px; }
+@media (max-width: 991.98px) { .sidebar-edge-toggle { display: none; } }
 
 .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; backdrop-filter: blur(2px); }
 .sidebar-overlay.active { display: block; }
@@ -397,11 +402,11 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-// Fallback: force-remove the old fixed-topnav spacing reserved by
-// style.css (--gov-topnav-height) even if a cached copy of that
-// stylesheet is still being served. Inline styles set here always
-// win over any external/cached CSS rule.
+// Fallback: if a page renders no .topnav (e.g. auth pages), force-remove
+// the fixed-topnav spacing reserved by --gov-topnav-height even if a
+// cached stylesheet is served. Inline styles always win.
 document.addEventListener('DOMContentLoaded', function() {
+  if (document.querySelector('.topnav')) return;
   document.documentElement.style.setProperty('--gov-topnav-height', '0px');
   const wrapper = document.querySelector('.app-wrapper');
   if (wrapper) {

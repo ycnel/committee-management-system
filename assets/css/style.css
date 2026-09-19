@@ -54,7 +54,7 @@
   --gov-gray-bg: var(--n-bg);
   --gov-gray-border: var(--n-border);
   --gov-sidebar-width: 264px;
-  --gov-topnav-height: 0px; /* top navbar removed; sidebar owns full height */
+  --gov-topnav-height: 56px; /* fixed top navbar; sidebar owns full height on the left */
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -87,13 +87,36 @@ a { color: var(--ln-text-heading); text-decoration: none; }
 }
 .auth-card { border-radius: var(--radius-lg); border: 1px solid var(--ln-border); box-shadow: var(--shadow-md); }
 
-/* ---------- Top navbar (kept for backward compatibility; unused
-   now that header.php no longer renders a navbar) ---------- */
+/* ---------- Fixed top navbar ---------- */
 .topnav {
+  position: fixed;
+  top: 0;
+  left: var(--gov-sidebar-width);
+  right: 0;
   height: var(--gov-topnav-height);
-  z-index: 1050;
+  z-index: 900; /* below .sidebar (1000) so the mobile drawer slides over it */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px;
+  background: var(--n-surface, #fff);
+  border-bottom: 1px solid var(--n-border, #E5E7EB);
+  transition: left 0.25s ease;
 }
 .topnav .dropdown-menu { font-size: 14px; }
+.topnav-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--n-text, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.main-content.sidebar-collapsed .topnav { left: 0; }
+@media (max-width: 991.98px) {
+  .topnav { left: 0; padding: 0 16px; }
+}
 
 /* ---------- App shell ---------- */
 .app-wrapper {
@@ -411,39 +434,70 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
 .committee-card-status { padding: 4px 8px; border: 1px solid var(--ln-border); border-radius: 999px; color: var(--ln-text-body); background: var(--ln-surface-2); font-weight: 600; }
 .committee-card-status.status-active { color: #1a7a34; background: rgba(39,166,68,0.1); border-color: rgba(39,166,68,0.2); }
 .jurisdiction-card-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; padding: 20px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; padding: 20px;
 }
 .jurisdiction-card {
-  min-height: 250px; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 20px; border: 1px solid rgba(255,255,255,0.32); border-radius: 10px; color: #fff; background: #09356ffd; cursor: pointer;
-  box-shadow: none; transition: transform 0.25s ease, border-radius 0.25s ease;
+  min-height: 230px; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 20px; border: 1px solid rgba(255,255,255,0.14); border-radius: 14px; color: #fff;
+  background: linear-gradient(155deg, #0f4a94 0%, #0b3a76 48%, #082452 100%); cursor: pointer;
+  box-shadow: 0 1px 2px rgba(4,18,43,0.35), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.jurisdiction-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #D4AF37 0%, rgba(212,175,55,0.55) 45%, transparent 100%);
 }
 .jurisdiction-card::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(circle at 100% 0, rgba(255,255,255,0.22) 0 2px, transparent 3px) 0 0 / 24px 24px; opacity: 0.35; transition: opacity 0.25s ease;
+  background: radial-gradient(circle at 100% 0, rgba(255,255,255,0.22) 0 2px, transparent 3px) 0 0 / 24px 24px; opacity: 0.3; transition: opacity 0.25s ease;
 }
 .jurisdiction-card:hover, .jurisdiction-card:focus-visible {
-  transform: translateY(-5px) scale(1.015); border-radius: 16px; outline: none;
+  transform: translateY(-4px); border-color: rgba(255,255,255,0.3);
+  box-shadow: 0 14px 30px rgba(4,18,43,0.45); outline: none;
 }
+.jurisdiction-card:focus-visible { box-shadow: 0 14px 30px rgba(4,18,43,0.45), 0 0 0 3px rgba(212,175,55,0.55); }
 .jurisdiction-card:hover::after, .jurisdiction-card:focus-visible::after { opacity: 0.18; }
-.jurisdiction-card-details { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; }
+.jurisdiction-card-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; }
+.jurisdiction-card-details { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 16px; }
 .jurisdiction-card-icon {
-  width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.35); border-radius: 10px;
-  color: #fff; background: rgba(255,255,255,0.15); font-size: 19px;
+  width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.25); border-radius: 12px;
+  color: #fff; background: linear-gradient(145deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06));
+  font-size: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+.jurisdiction-card-count {
+  padding: 4px 10px; border: 1px solid rgba(255,255,255,0.22); border-radius: 999px;
+  color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.1); font-size: 11px; font-weight: 600;
 }
 .jurisdiction-card-meta { display: flex; justify-content: space-between; gap: 8px; color: rgba(255,255,255,0.78); font-size: 11px; }
-.jurisdiction-card-title { color: #fff; font-size: 19px; line-height: 1.2; font-weight: 700; }
+.jurisdiction-card-chip { padding: 3px 9px; border-radius: 999px; background: rgba(212,175,55,0.16); color: #f2d98c; font-weight: 600; letter-spacing: 0.2px; }
+.jurisdiction-card-title { position: relative; width: fit-content; color: #fff; font-size: 19px; line-height: 1.2; font-weight: 700; }
+.jurisdiction-card-title::after { content: ''; position: absolute; left: 0; bottom: -3px; width: 100%; height: 2px; background: #D4AF37; transform: scaleX(0); transform-origin: left; transition: transform 0.25s ease; }
+.jurisdiction-card:hover .jurisdiction-card-title::after, .jurisdiction-card:focus-visible .jurisdiction-card-title::after { transform: scaleX(1); }
 .jurisdiction-card-description { min-height: 38px; color: rgba(255,255,255,0.84); font-size: 12px; line-height: 1.45; }
 .jurisdiction-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .jurisdiction-card-status { padding: 4px 8px; border-radius: 999px; color: #fff; background: rgba(255,255,255,0.15); font-size: 11px; font-weight: 600; }
 .jurisdiction-card-status.status-active { background: rgba(255,255,255,0.18); }
 .jurisdiction-card-status.status-inactive { background: rgba(0,0,0,0.2); }
+.jurisdiction-card-cta { display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: 12px; font-weight: 600; }
+.jurisdiction-card-cta i { transition: transform 0.2s ease; }
+.jurisdiction-card:hover .jurisdiction-card-cta i, .jurisdiction-card:focus-visible .jurisdiction-card-cta i { transform: translateX(4px); }
 .jurisdiction-actions { display: flex; gap: 6px; }
 .jurisdiction-action-button {
   width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1px solid rgba(255,255,255,0.35);
   border-radius: var(--radius-sm); color: #fff; background: rgba(255,255,255,0.15); cursor: pointer; transition: background 0.15s ease, transform 0.15s ease;
 }
 .jurisdiction-action-button:hover { background: rgba(255,255,255,0.3); transform: translateY(-1px); }
+@keyframes jurisdictionCardIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.jurisdiction-card-grid > .jurisdiction-card { animation: jurisdictionCardIn 0.35s ease both; }
+.jurisdiction-card-grid > .jurisdiction-card:nth-child(2) { animation-delay: 0.05s; }
+.jurisdiction-card-grid > .jurisdiction-card:nth-child(3) { animation-delay: 0.1s; }
+.jurisdiction-card-grid > .jurisdiction-card:nth-child(4) { animation-delay: 0.15s; }
+.jurisdiction-card-grid > .jurisdiction-card:nth-child(5) { animation-delay: 0.2s; }
+.jurisdiction-card-grid > .jurisdiction-card:nth-child(n+6) { animation-delay: 0.25s; }
+@media (prefers-reduced-motion: reduce) {
+  .jurisdiction-card-grid > .jurisdiction-card { animation: none; }
+  .jurisdiction-card, .jurisdiction-card-title::after, .jurisdiction-card-cta i { transition: none; }
+}
 .jurisdiction-committee-row { cursor: pointer; }
 .jurisdiction-committee-row:focus-visible { outline: 2px solid var(--ln-accent); outline-offset: -2px; }
 .committee-card-status.status-dissolved { background: rgba(255,255,255,0.12); }
@@ -452,6 +506,7 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
 .committee-action-button:hover { border-color: var(--ln-border-strong); color: #0B2E59; background: #fff; }
 .committee-action-button span { margin-left: 4px; }
 .committee-empty-state { margin: 0 20px; }
+.apply-pending-dot { position: absolute; top: -4px; right: -4px; width: 9px; height: 9px; border-radius: 50%; background: #F0B429; box-shadow: 0 0 0 2px #fff; }
 
 /* ---------- Formal legislative report preview ---------- */
 .report-preview { background: #fff; border-color: #d9dee7; }
@@ -711,7 +766,7 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
 
 .overview-card {
   position: relative; overflow: hidden; isolation: isolate; border: 0;
-  background: linear-gradient(135deg, #00c6ff, #0072ff); color: #fff;
+  background: linear-gradient(135deg, #1F4E85 0%, #0B2E59 55%, #061A35 100%); color: #fff;
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
   transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
 }
@@ -842,7 +897,7 @@ body.sidebar-collapsed .main-content { margin-left: 0; }
   border: 1px solid var(--ln-border); border-radius: 999px; color: var(--ln-text-muted); font-size: 11px;
 }
 .performance-live-badge span { width: 7px; height: 7px; border-radius: 50%; background: var(--ln-green); }
-.performance-dashboard { max-width: 1180px; }
+.performance-dashboard { width: 100%; }
 .performance-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .performance-stat {
   display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: center;

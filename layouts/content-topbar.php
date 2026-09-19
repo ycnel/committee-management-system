@@ -15,10 +15,12 @@
 ?>
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/auth-loading.css">
 
-<div class="content-topbar">
+<nav class="topnav" aria-label="Top navigation">
   <button type="button" class="mobile-sidebar-toggle d-lg-none" id="mobileSidebarToggle" aria-label="Open menu">
     <i class="bi bi-list"></i>
   </button>
+
+  <span class="topnav-title"><?= e($pageTitle ?? 'CMAS') ?></span>
 
   <div class="topbar-spacer"></div>
 
@@ -62,7 +64,7 @@
       </ul>
     </div>
   </div>
-</div>
+</nav>
 
 <div class="auth-loading" id="authLoading" role="status" aria-live="polite" aria-hidden="true">
   <div class="auth-loading-content">
@@ -76,12 +78,6 @@
 </div>
 
 <style>
-.content-topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-}
 .topbar-spacer { flex: 1; }
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 
@@ -101,10 +97,6 @@
 .topbar-profile-btn:hover { background: var(--n-bg, #F7F8FA); }
 .topbar-username { font-size: 13.5px; font-weight: 600; color: var(--n-text, #111827); }
 .topbar-profile-btn .avatar-circle.sm { width: 28px; height: 28px; font-size: 11px; }
-
-@media (max-width: 991.98px) {
-  .content-topbar { margin-bottom: 16px; }
-}
 </style>
 
 <script>
