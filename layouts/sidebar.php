@@ -354,7 +354,6 @@ $menuItems = [
 @media (max-width: 992px) {
   .sidebar { transform: translateX(-100%); width: 280px; box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4); }
   .sidebar.active { transform: translateX(0); }
-  .sidebar.collapsed { width: 72px; transform: translateX(0); }
   .sidebar-overlay.active { display: block; }
 }
 
@@ -500,6 +499,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (mainContent) {
                     mainContent.classList.toggle('sidebar-collapsed', sidebar.classList.contains('collapsed'));
                 }
+            } else if (sidebar.classList.contains('collapsed')) {
+                sidebar.classList.remove('collapsed');
+                if (mainContent) mainContent.classList.remove('sidebar-collapsed');
             }
         }, 200);
     });
