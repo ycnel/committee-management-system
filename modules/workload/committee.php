@@ -39,8 +39,20 @@ $summaryStmt = $pdo->prepare(
   $summaryStmt->execute([':cid' => $selectedCommitteeId, ':is_manager' => canManage() ? 1 : 0, ':uid' => currentUserId()]);
 $committeeSummary = $summaryStmt->fetch() ?: ['total_assignments' => 0];
 
+$embed = !empty($_GET['embed']); // chromeless mode for the workload iframe modal
 include __DIR__ . '/../../layouts/header.php';
 ?>
+<?php if ($embed): ?>
+<div class="p-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <h5 class="mb-0"><i class="bi bi-diagram-3 text-primary"></i> <?= e($selectedCommitteeName) ?> Workload</h5>
+    <?php if (canManage()): ?>
+      <button type="button" class="btn btn-primary btn-sm" id="btnAddTask">
+        <i class="bi bi-plus-circle"></i> Assign Task
+      </button>
+    <?php endif; ?>
+  </div>
+<?php else: ?>
 <div class="app-wrapper">
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
@@ -66,6 +78,7 @@ include __DIR__ . '/../../layouts/header.php';
         <?php endif; ?>
       </div>
     </div>
+<?php endif; ?>
 
     <div class="workload-mini-overview mb-3">
       <div class="workload-mini-overview-header">
@@ -82,19 +95,28 @@ include __DIR__ . '/../../layouts/header.php';
 
     <div class="card mb-3">
       <div class="card-body py-3">
-        <form id="filterForm" class="row g-2 align-items-center">
+        <form id="filterForm" class="d-flex flex-wrap gap-2 align-items-center">
           <input type="hidden" name="committee_id" value="<?= (int)$selectedCommitteeId ?>">
-          <div class="col-md-4">
-            <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search task title...">
-          </div>
-          <div class="col-md-3">
-            <select class="form-select form-select-sm" name="priority">
-              <option value="">All Priorities</option>
-              <?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?>
-                <option value="<?= e($p) ?>"><?= e($p) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
+          <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search task title..." style="min-width:200px;">
+          <select class="form-select form-select-sm" name="priority" style="min-width:130px;">
+            <option value="">All Priorities</option>
+            <?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?>
+              <option value="<?= e($p) ?>"><?= e($p) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <select class="form-select form-select-sm" name="sort" aria-label="Sort by" style="min-width:130px;">
+            <option value="due_date" selected>Due date</option>
+            <option value="task_title">Title</option>
+            <option value="priority">Priority</option>
+          </select>
+          <select class="form-select form-select-sm" name="dir" aria-label="Sort direction" style="min-width:90px;">
+            <option value="asc" selected>Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm position-relative" id="filterApply">
+            <i class="bi bi-check2"></i> Apply<span class="apply-pending-dot d-none" id="applyPendingDot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="filterReset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
         </form>
       </div>
     </div>
@@ -105,11 +127,11 @@ include __DIR__ . '/../../layouts/header.php';
       </div>
     </div>
   </div>
-</div>
+<?php if (!$embed): ?></div><?php endif; ?>
 
 <?php if (canManage()): ?>
 <div class="modal fade" id="taskModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form id="taskForm">
         <?= csrfField() ?>

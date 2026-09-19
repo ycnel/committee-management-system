@@ -5,8 +5,9 @@
  * Handles the login form POST from login.php.
  *
  * v1.1: no longer creates an authenticated session directly. Instead:
- *   1. Check the account isn't currently locked (3 failed attempts ->
- *      5-minute lock, tracked server-side in `login_security`).
+ *   1. Check the account isn't currently locked (escalating lockout:
+ *      4th failure = 3 min, 5th = 5 min, 6th = 10 min, 7th+ = 24 h,
+ *      tracked server-side in `login_security`).
  *   2. Verify credentials with password_verify().
  *   3. On success, issue an OTP and redirect to otp_verify.php — the
  *      session is only created after OTP verification succeeds
@@ -58,13 +59,12 @@ try {
         $security->recordFailure($email);
         logActivity(null, 'Login Failed', 'Email: ' . $email);
 
-        // Check the actual lock state directly rather than the attempts
-        // counter — recordFailure() resets that counter to 0 as part of
-        // locking, so re-reading it here would wrongly look like a
-        // fresh, unlocked account on the very attempt that triggers the lock.
+        // Check the actual lock state directly — recordFailure() applies
+        // the escalating lock duration for this failure count.
         if ($security->isLocked($email)) {
-            logActivity(null, 'Account Locked', 'Email: ' . $email . ' locked for ' . (LoginSecurity::LOCK_SECONDS / 60) . ' minutes after repeated failed attempts.');
-            setFlash('danger', 'This account has been locked for 5 minutes due to 3 failed login attempts.');
+            $lockLabel = LoginSecurity::durationLabel($security->lockSecondsRemaining($email));
+            logActivity(null, 'Account Locked', 'Email: ' . $email . ' locked for ' . $lockLabel . ' after repeated failed attempts.');
+            setFlash('danger', "This account has been locked for {$lockLabel} due to repeated failed login attempts.");
         } else {
             $remaining = $security->attemptsRemaining($email);
             setFlash('danger', "Invalid email or password. {$remaining} attempt(s) remaining before this account is temporarily locked.");

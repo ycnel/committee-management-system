@@ -239,7 +239,6 @@ include __DIR__ . '/../../layouts/header.php';
         </div>
       </div>
       <div class="modal-footer">
-        <a href="#" class="btn btn-outline-secondary btn-sm" id="jvFullView"><i class="bi bi-box-arrow-up-right"></i> Open full page</a>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
       </div>
     </div>
@@ -247,6 +246,6 @@ include __DIR__ . '/../../layouts/header.php';
 </div>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/jurisdictions.js?v=4'];
+$extraJs = [APP_URL . '/assets/js/jurisdictions.js?v=5'];
 include __DIR__ . '/../../layouts/footer.php';
 ?>

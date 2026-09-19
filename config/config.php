@@ -10,6 +10,27 @@
  * ------------------------------------------------------------------
  */
 
+// ---- .env loader ---------------------------------------------------
+// Minimal KEY=VALUE parser: loads the project .env into getenv()/$_ENV.
+// NOTE: .env wins over inherited environment variables — deliberate for
+// local dev, where the file is the intended source of truth. The file is
+// gitignored, so deployed environments (real env vars) are unaffected
+// whenever no .env is present.
+$cmasEnvFile = dirname(__DIR__) . '/.env';
+if (is_file($cmasEnvFile)) {
+    foreach (file($cmasEnvFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $k = trim($k); $v = trim($v, " \t\"'");
+        if ($k === '') continue;
+        putenv("$k=$v");
+        $_ENV[$k] = $v;
+        $_SERVER[$k] = $v;
+    }
+}
+unset($cmasEnvFile);
+
 // ---- Database credentials ----------------------------------------
 // Reads HostForge environment variables first; falls back to local XAMPP values.
 function cmas_env(array $keys, string $default = ''): string

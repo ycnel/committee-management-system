@@ -17,8 +17,9 @@ $dateTo = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo) ? $dateTo : null;
 try {
     $pdo = db();
     $data = buildCommitteeReportData($pdo, 'performance', $committeeId, $dateFrom, $dateTo);
-    $narrative = buildReportNarrative($pdo, 'performance', $data, $committeeId);
-    jsonResponse(true, 'Performance analysis generated.', ['analysis' => $narrative]);
+    $aiUsed = false;
+    $narrative = buildReportNarrative($pdo, 'performance', $data, $committeeId, $aiUsed);
+    jsonResponse(true, 'Performance analysis generated.', ['analysis' => $narrative, 'ai' => $aiUsed]);
 } catch (Throwable $e) {
     error_log('Performance analysis error: ' . $e->getMessage());
     jsonResponse(false, 'Performance analysis is temporarily unavailable.');

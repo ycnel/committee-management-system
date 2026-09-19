@@ -49,13 +49,6 @@ $rows = $stmt->fetchAll();
 
 $priorityColors = ['Low' => 'success', 'Medium' => 'info', 'High' => 'warning', 'Urgent' => 'danger'];
 ?>
-<div class="workload-list-toolbar">
-  <span class="small text-muted">Sort tasks by:</span>
-  <a href="#" class="sort-link" data-sort="task_title">Title <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="priority">Priority <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="due_date">Due date <i class="bi bi-arrow-down-up sort-icon"></i></a>
-</div>
-
 <?php if (empty($rows)): ?>
   <div class="workload-empty-state text-center text-muted py-5">
     <p class="mb-3">No tasks found for the selected filters.</p>

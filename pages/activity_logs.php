@@ -78,10 +78,33 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $logs = $stmt->fetchAll();
 
+// Filtered CSV export of the audit trail (capped for safety)
+if (($_GET['export'] ?? '') === 'csv') {
+    $expStmt = $pdo->prepare(
+        "SELECT l.created_at, u.full_name, l.action, ($moduleSql) AS module_name,
+                ($statusSql) AS activity_status, l.details, l.ip_address, l.user_agent
+         FROM activity_logs l LEFT JOIN users u ON u.id = l.user_id
+         $whereSql ORDER BY l.created_at DESC LIMIT 5000"
+    );
+    $expStmt->execute($params);
+    logActivity((int)$_SESSION['user_id'], 'Export', 'Audit Logs CSV export');
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="audit_logs_' . date('Ymd_His') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['Date & Time', 'User', 'Action', 'Module', 'Description', 'Status', 'IP Address', 'User Agent']);
+    foreach ($expStmt->fetchAll() as $r) {
+        fputcsv($out, [$r['created_at'], $r['full_name'] ?? 'System', $r['action'], $r['module_name'], $r['details'], $r['activity_status'], $r['ip_address'], $r['user_agent']]);
+    }
+    fclose($out);
+    exit;
+}
+
 $summaryStmt = $pdo->prepare(
   "SELECT COUNT(*) AS total_activities,
       SUM(CASE WHEN l.user_id IS NOT NULL THEN 1 ELSE 0 END) AS user_actions,
-  SUM(CASE WHEN l.user_id IS NULL THEN 1 ELSE 0 END) AS system_actions
+      SUM(CASE WHEN l.user_id IS NULL THEN 1 ELSE 0 END) AS system_actions,
+      SUM(CASE WHEN ($statusSql) = 'Success' THEN 1 ELSE 0 END) AS success_actions,
+      SUM(CASE WHEN ($statusSql) = 'Failed' THEN 1 ELSE 0 END) AS failed_actions
    FROM activity_logs l
    LEFT JOIN users u ON u.id = l.user_id
    $whereSql"
@@ -99,6 +122,27 @@ function activityActionLabel(string $action, string $details): string
   if ($action === 'Insert' && stripos($details, 'assigned to committee') !== false) return 'Assigned';
   if ($action === 'Update' && stripos($details, 'completed') !== false) return 'Completed';
   return ['Insert' => 'Created', 'Update' => 'Updated', 'Delete' => 'Deleted', 'Export' => 'Exported'][$action] ?? $action;
+}
+
+/** Condense a raw User-Agent into "Browser · OS" for the Device column. */
+function activityDeviceLabel(?string $ua): array
+{
+  if (!$ua) return ['—', 'bi-question-circle'];
+  $browser = 'Other';
+  if (preg_match('/Edg(e|A|iOS)?\//', $ua))        $browser = 'Edge';
+  elseif (stripos($ua, 'OPR/') !== false || stripos($ua, 'Opera') !== false) $browser = 'Opera';
+  elseif (stripos($ua, 'Chrome/') !== false)       $browser = 'Chrome';
+  elseif (stripos($ua, 'Firefox/') !== false)      $browser = 'Firefox';
+  elseif (stripos($ua, 'Safari/') !== false)       $browser = 'Safari';
+  elseif (stripos($ua, 'PowerShell') !== false || stripos($ua, 'curl') !== false) $browser = 'CLI';
+  $os = 'Other OS';
+  if (stripos($ua, 'Windows NT') !== false)        $os = 'Windows';
+  elseif (stripos($ua, 'Android') !== false)       $os = 'Android';
+  elseif (stripos($ua, 'iPhone') !== false || stripos($ua, 'iPad') !== false) $os = 'iOS';
+  elseif (stripos($ua, 'Mac OS X') !== false)      $os = 'macOS';
+  elseif (stripos($ua, 'Linux') !== false)         $os = 'Linux';
+  $mobile = stripos($ua, 'Mobile|Android|iPhone|iPad') !== false;
+  return [$browser . ' · ' . $os, $mobile ? 'bi-phone' : 'bi-display'];
 }
 
 include __DIR__ . '/../layouts/header.php';
@@ -137,7 +181,9 @@ include __DIR__ . '/../layouts/header.php';
           <option value="">Status</option><option value="Success" <?= $status === 'Success' ? 'selected' : '' ?>>Success</option><option value="Failed" <?= $status === 'Failed' ? 'selected' : '' ?>>Failed</option>
         </select></div>
         <div class="col-md-2"><div class="input-group input-group-sm"><input type="date" class="form-control" name="date_from" value="<?= e($dateFrom) ?>" aria-label="Date from"><input type="date" class="form-control" name="date_to" value="<?= e($dateTo) ?>" aria-label="Date to"></div></div>
-        <div class="col-md-12 d-flex justify-content-end gap-2 activity-filter-actions"><a href="activity_logs.php" class="btn btn-outline-secondary btn-sm activity-filter-action activity-filter-control">Reset</a>
+        <div class="col-md-12 d-flex justify-content-end gap-2 activity-filter-actions">
+          <a href="activity_logs.php" class="btn btn-outline-secondary btn-sm activity-filter-action activity-filter-control">Reset</a>
+          <a href="activity_logs.php?<?= e(http_build_query(array_merge($_GET, ['export' => 'csv']))) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download"></i> Export CSV</a>
           <button type="submit" class="btn btn-primary btn-sm activity-filter-action activity-filter-control"><i class="bi bi-search"></i> Apply Filters</button>
         </div>
       </form>
@@ -146,29 +192,42 @@ include __DIR__ . '/../layouts/header.php';
 
   <div class="row g-3 mb-3">
     <?php
-      $summaryCards = [['Total Activities', $summary['total_activities'] ?? 0, 'bi-activity', 'bg-gov-blue'], ['User Actions', $summary['user_actions'] ?? 0, 'bi-person-check', 'bg-gov-teal'], ['System Actions', $summary['system_actions'] ?? 0, 'bi-shield-check', 'bg-gov-red']];
+      $summaryCards = [
+        ['Total Activities', $summary['total_activities'] ?? 0, 'bi-activity'],
+        ['Successful', $summary['success_actions'] ?? 0, 'bi-check-circle'],
+        ['Failed', $summary['failed_actions'] ?? 0, 'bi-x-octagon'],
+        ['User Actions', $summary['user_actions'] ?? 0, 'bi-person-check'],
+        ['System Actions', $summary['system_actions'] ?? 0, 'bi-shield-check'],
+      ];
     ?>
     <?php foreach ($summaryCards as $card): ?>
-      <div class="col-6 col-lg-3"><div class="card stat-card activity-summary-card"><div class="card-body"><i class="bi <?= e($card[2]) ?> stat-icon"></i><div class="stat-value"><?= (int)$card[1] ?></div><div class="stat-label"><?= e($card[0]) ?></div></div></div></div>
+      <div class="col-6 col-md-4 col-lg"><div class="card stat-card activity-summary-card"><div class="card-body"><i class="bi <?= e($card[2]) ?> stat-icon"></i><div class="stat-value"><?= (int)$card[1] ?></div><div class="stat-label"><?= e($card[0]) ?></div></div></div></div>
     <?php endforeach; ?>
   </div>
 
   <div class="card">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
-        <thead><tr><th>Date &amp; Time</th><th>User</th><th>Action</th><th>Module</th><th>Description</th><th>Status</th><th class="text-end">IP Address</th></tr></thead>
+        <thead><tr><th>Date &amp; Time</th><th>User</th><th>Action</th><th>Module</th><th>Description</th><th>Status</th><th>Device</th><th class="text-end">IP Address</th></tr></thead>
         <tbody>
           <?php if (empty($logs)): ?>
-            <tr><td colspan="7" class="text-center text-muted py-4">No activity recorded yet.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted py-4">No activity recorded yet.</td></tr>
           <?php else: foreach ($logs as $l): ?>
-            <?php $displayAction = activityActionLabel($l['action'], $l['details'] ?? ''); ?>
+            <?php
+              $displayAction = activityActionLabel($l['action'], $l['details'] ?? '');
+              [$deviceLabel, $deviceIcon] = activityDeviceLabel($l['user_agent'] ?? null);
+            ?>
             <tr>
-              <td class="small text-muted"><?= e(formatDateTime($l['created_at'])) ?></td>
+              <td class="small text-muted" title="<?= e($l['created_at']) ?>"><?= e(formatDateTime($l['created_at'])) ?></td>
               <td><?= e($l['full_name'] ?? 'System') ?></td>
-              <td><span class="badge bg-<?= e($actionColors[$displayAction] ?? 'secondary') ?>"><?= e($displayAction) ?></span></td>
+              <td>
+                <span class="badge bg-<?= e($actionColors[$displayAction] ?? 'secondary') ?>"><?= e($displayAction) ?></span>
+                <?php if ($displayAction !== $l['action']): ?><span class="text-muted small ms-1"><?= e($l['action']) ?></span><?php endif; ?>
+              </td>
               <td><span class="badge bg-light text-dark border"><?= e($l['module_name']) ?></span></td>
               <td class="small"><?= e($l['details'] ?? '') ?></td>
               <td><span class="badge bg-<?= $l['activity_status'] === 'Failed' ? 'danger' : 'success' ?>"><?= e($l['activity_status']) ?></span></td>
+              <td class="small text-muted" title="<?= e($l['user_agent'] ?? '') ?>"><i class="bi <?= e($deviceIcon) ?>"></i> <?= e($deviceLabel) ?></td>
               <td class="text-end small text-muted"><?= e($l['ip_address'] ?? '—') ?></td>
             </tr>
           <?php endforeach; endif; ?>

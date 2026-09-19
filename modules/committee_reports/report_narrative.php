@@ -3,8 +3,9 @@
 
 require_once __DIR__ . '/../../includes/GeminiAI.php';
 
-function buildReportNarrative(PDO $pdo, string $type, array $data, int $committeeId = 0): array
+function buildReportNarrative(PDO $pdo, string $type, array $data, int $committeeId = 0, ?bool &$aiUsed = null): array
 {
+    $aiUsed = false;
     $label = ucfirst($type) . ' Report';
     $context = [
         'report_type' => $label,
@@ -22,7 +23,7 @@ function buildReportNarrative(PDO $pdo, string $type, array $data, int $committe
     try {
         $ai = new GeminiAI($pdo);
         $draft = $ai->generateReportNarrative($context);
-        if ($draft['available']) return $draft['sections'];
+        if ($draft['available']) { $aiUsed = true; return $draft['sections']; }
     } catch (Throwable $e) {
         error_log('Report narrative generation error: ' . $e->getMessage());
     }

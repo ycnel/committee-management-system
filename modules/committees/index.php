@@ -134,6 +134,51 @@ include __DIR__ . '/../../layouts/header.php';
     </div>
   </div>
 
+<!-- Read-only committee detail modal (card click target) -->
+<div class="modal fade" id="committeeViewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-diagram-3 text-primary"></i> <span id="cvmName">Committee</span> <span class="badge ms-1" id="cvmStatus"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <div class="border rounded p-3 h-100">
+              <div class="small fw-semibold text-uppercase mb-2" style="letter-spacing:.05em;color:var(--ln-text-muted);">Committee Information</div>
+              <dl class="row mb-0 small">
+                <dt class="col-5">Jurisdiction</dt><dd class="col-7" id="cvmJurisdiction">—</dd>
+                <dt class="col-5">Category</dt><dd class="col-7" id="cvmCategory">—</dd>
+                <dt class="col-5">Created</dt><dd class="col-7" id="cvmCreated">—</dd>
+                <dt class="col-5">Members</dt><dd class="col-7"><span class="badge bg-primary rounded-pill" id="cvmMemberCount">0</span></dd>
+              </dl>
+            </div>
+          </div>
+          <div class="col-md-8">
+            <div class="border rounded p-3 h-100">
+              <div class="small fw-semibold text-uppercase mb-2" style="letter-spacing:.05em;color:var(--ln-text-muted);">Description</div>
+              <p class="small text-muted mb-0" id="cvmDescription" style="white-space:pre-line;"></p>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="small fw-semibold text-uppercase mb-2" style="letter-spacing:.05em;color:var(--ln-text-muted);"><i class="bi bi-people"></i> Members</div>
+            <div class="table-responsive border rounded">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead><tr><th>Name</th><th>Account Role</th><th>Committee Role</th><th class="text-end">Assigned</th></tr></thead>
+                <tbody id="cvmMembersBody"><tr><td colspan="4" class="text-center text-muted py-3">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <?php if (canManage()): ?>
 <div class="modal fade" id="committeeModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -186,6 +231,6 @@ include __DIR__ . '/../../layouts/header.php';
 <?php endif; ?>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/committees.js?v=3'];
+$extraJs = [APP_URL . '/assets/js/committees.js?v=5'];
 include __DIR__ . '/../../layouts/footer.php';
 ?>

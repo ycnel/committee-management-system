@@ -54,7 +54,9 @@ $totalRows = (int)$countStmt->fetchColumn();
 $pageInfo = paginate($totalRows);
 
 $sql = "SELECT c.*, j.jurisdiction_name,
-               (SELECT COUNT(*) FROM committee_members cm WHERE cm.committee_id = c.committee_id AND cm.status = 'Active') AS member_count
+               $memberCountSql AS member_count,
+               (SELECT COUNT(*) FROM committee_members cm2 INNER JOIN workload_assignments wa ON wa.committee_member_id = cm2.committee_member_id
+                WHERE cm2.committee_id = c.committee_id AND wa.status <> 'Completed') AS open_assignments
         FROM committees c
         LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
         $whereSql
@@ -71,11 +73,11 @@ $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' =
 <?php else: ?>
   <div class="committee-card-grid">
     <?php foreach ($rows as $r): ?>
-      <article class="committee-card committee-row" data-href="view.php?id=<?= (int)$r['committee_id'] ?>" tabindex="0">
+      <article class="committee-card committee-row" data-href="view.php?id=<?= (int)$r['committee_id'] ?>" data-id="<?= (int)$r['committee_id'] ?>" tabindex="0">
         <div class="committee-card-details">
-          <div class="committee-card-meta">
-            <span><?= e($r['jurisdiction_name'] ?: 'Unassigned jurisdiction') ?></span>
-            <span><?= (int)$r['member_count'] ?> member<?= (int)$r['member_count'] === 1 ? '' : 's' ?></span>
+          <div class="committee-card-top">
+            <span class="committee-card-jurisdiction" title="<?= e($r['jurisdiction_name'] ?: 'Unassigned jurisdiction') ?>"><i class="bi bi-geo-alt"></i><?= e($r['jurisdiction_name'] ?: 'Unassigned') ?></span>
+            <span class="committee-card-status status-<?= e(strtolower($r['status'])) ?>"><?= e($r['status']) ?></span>
           </div>
           <a href="view.php?id=<?= (int)$r['committee_id'] ?>" class="committee-card-title">
             <?= e($r['committee_name']) ?>
@@ -83,16 +85,17 @@ $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' =
           <div class="committee-card-description">
             <?= e($r['description'] ? truncate($r['description'], 110) : 'No description provided.') ?>
           </div>
-          <div class="committee-card-footer">
-            <span class="committee-card-date"><i class="bi bi-calendar3"></i> <?= formatDate($r['date_created']) ?></span>
-            <span class="committee-card-status status-<?= e(strtolower($r['status'])) ?>"><?= e($r['status']) ?></span>
+          <div class="committee-card-stats">
+            <span title="Active members"><i class="bi bi-people"></i> <?= (int)$r['member_count'] ?></span>
+            <span title="Open assignments" class="<?= (int)$r['open_assignments'] > 0 ? 'cc-has-open' : '' ?>"><i class="bi bi-clipboard-check"></i> <?= (int)$r['open_assignments'] ?> open</span>
+            <span class="ms-auto" title="Date created"><i class="bi bi-calendar3"></i> <?= formatDate($r['date_created']) ?></span>
           </div>
           <?php if (canManage()): ?>
             <div class="committee-actions">
-              <button type="button" class="committee-action-button btn-edit-committee" data-id="<?= (int)$r['committee_id'] ?>" title="Edit committee">
+              <button type="button" class="committee-action-button btn-edit-committee" data-id="<?= (int)$r['committee_id'] ?>" title="Edit committee" aria-label="Edit committee">
                 <i class="bi bi-pencil-square"></i><span>Edit</span>
               </button>
-              <button type="button" class="committee-action-button" data-confirm-delete="committee &quot;<?= e($r['committee_name']) ?>&quot;" data-delete-url="<?= e(APP_URL) ?>/modules/committees/ajax_delete.php?id=<?= (int)$r['committee_id'] ?>" title="Delete committee">
+              <button type="button" class="committee-action-button committee-action-danger" data-confirm-delete="committee &quot;<?= e($r['committee_name']) ?>&quot;" data-delete-url="<?= e(APP_URL) ?>/modules/committees/ajax_delete.php?id=<?= (int)$r['committee_id'] ?>" title="Delete committee" aria-label="Delete committee">
                 <i class="bi bi-trash"></i><span>Delete</span>
               </button>
             </div>

@@ -41,17 +41,68 @@
     });
   }
 
+  /* --- Committee detail modal (card click) --- */
+  const viewModalEl = document.getElementById('committeeViewModal');
+  const viewModal = viewModalEl ? new bootstrap.Modal(viewModalEl) : null;
+  const ROLE_COLORS = { 'Chairperson': 'primary', 'Vice Chairperson': 'info', 'Member': 'secondary' };
+  const STATUS_COLORS = { 'Active': 'success', 'Inactive': 'secondary', 'Dissolved': 'danger' };
+
+  function openCommitteeView(id, href) {
+    if (!viewModal) { window.location.href = href; return; }
+    appGet(window.APP_URL + '/modules/committees/ajax_get.php?id=' + encodeURIComponent(id)).then(data => {
+      if (!data.success) { if (!data.session_expired) appToast('error', data.message || 'Unable to load committee.'); return; }
+      const c = data.committee || {};
+      const status = c.status || '';
+      const statusEl = viewModalEl.querySelector('#cvmStatus');
+      statusEl.textContent = status;
+      statusEl.className = 'badge ms-1 bg-' + (STATUS_COLORS[status] || 'secondary');
+      viewModalEl.querySelector('#cvmName').textContent = c.committee_name || 'Committee';
+      viewModalEl.querySelector('#cvmJurisdiction').textContent = c.jurisdiction_name || 'Unassigned';
+      viewModalEl.querySelector('#cvmCategory').textContent = c.jurisdiction_category || '—';
+      viewModalEl.querySelector('#cvmCreated').textContent = data.created_label || '—';
+      viewModalEl.querySelector('#cvmDescription').textContent = c.description || 'No description provided.';
+      const members = data.members || [];
+      viewModalEl.querySelector('#cvmMemberCount').textContent = members.length;
+      const tbody = viewModalEl.querySelector('#cvmMembersBody');
+      tbody.innerHTML = '';
+      if (!members.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No members assigned yet.</td></tr>';
+      } else {
+        members.forEach(function (m) {
+          const tr = document.createElement('tr');
+          const nameTd = document.createElement('td');
+          const nm = document.createElement('div'); nm.className = 'fw-semibold'; nm.textContent = m.full_name || '';
+          const em = document.createElement('div'); em.className = 'small text-muted'; em.textContent = m.email || '';
+          nameTd.appendChild(nm); nameTd.appendChild(em);
+          const roleTd = document.createElement('td');
+          const rB = document.createElement('span'); rB.className = 'badge bg-light text-dark border'; rB.textContent = m.role_name || '';
+          roleTd.appendChild(rB);
+          const cRoleTd = document.createElement('td');
+          const cB = document.createElement('span'); cB.className = 'badge bg-' + (ROLE_COLORS[m.member_role] || 'secondary'); cB.textContent = m.member_role || '';
+          cRoleTd.appendChild(cB);
+          const dateTd = document.createElement('td'); dateTd.className = 'text-end small text-muted'; dateTd.textContent = m.assigned_label || '—';
+          tr.appendChild(nameTd); tr.appendChild(roleTd); tr.appendChild(cRoleTd); tr.appendChild(dateTd);
+          tbody.appendChild(tr);
+        });
+      }
+      viewModal.show();
+    });
+  }
+
   function bindRowEvents() {
     wrap.querySelectorAll('.committee-row').forEach(row => {
       row.style.cursor = 'pointer';
+      const open = function () { openCommitteeView(row.getAttribute('data-id'), row.getAttribute('data-href')); };
       row.addEventListener('click', function (e) {
-        if (e.target.closest('a, button, input, select, textarea, .committee-actions')) return;
-        window.location.href = row.getAttribute('data-href');
+        if (e.target.closest('button, input, select, textarea, .committee-actions')) return;
+        if (e.target.closest('a') && !e.target.closest('.committee-card-title')) return;
+        e.preventDefault();
+        open();
       });
       row.addEventListener('keydown', function (e) {
         if ((e.key === 'Enter' || e.key === ' ') && e.target === row) {
           e.preventDefault();
-          window.location.href = row.getAttribute('data-href');
+          open();
         }
       });
     });

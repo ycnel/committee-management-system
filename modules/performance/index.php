@@ -99,8 +99,9 @@ include __DIR__ . '/../../layouts/header.php';
       <?php if (canManage()): ?>
       <div class="card hero-card mb-3 d-none" id="aiAnalysisCard">
         <div class="card-body">
-          <div class="performance-card-heading"><div><span class="performance-kicker">Smart AI</span><h2>Assignment Analysis</h2></div></div>
+          <div class="performance-card-heading"><div><span class="performance-kicker">Smart AI</span><h2>Assignment Analysis</h2></div><span class="badge badge-soft-neutral" id="aiAnalysisSource"></span></div>
           <div id="aiAnalysisBody" class="small"></div>
+          <div class="ai-analysis-foot" id="aiAnalysisFoot"></div>
         </div>
       </div>
       <?php endif; ?>
@@ -144,6 +145,18 @@ new Chart(document.getElementById('assignmentDistributionChart'), { type: 'bar',
   const body = document.getElementById('aiAnalysisBody');
   if (!btn || !card || !body) return;
 
+  const sourceBadge = document.getElementById('aiAnalysisSource');
+  const foot = document.getElementById('aiAnalysisFoot');
+
+  const AI_NAMES = <?= json_encode((function () use ($report) {
+      $m = ['committees' => [], 'members' => []];
+      foreach ($report['performance_details'] ?? [] as $c) {
+          $m['committees'][(int)$c['committee_id']] = $c['committee_name'];
+          foreach ($c['members'] ?? [] as $mem) { $m['members'][(int)$mem['committee_member_id']] = $mem['member_name']; }
+      }
+      return $m;
+  })()) ?>;
+
   const SECTIONS = {
     executive_summary: 'Executive Summary',
     analysis: 'Analysis',
@@ -152,20 +165,59 @@ new Chart(document.getElementById('assignmentDistributionChart'), { type: 'bar',
     conclusion: 'Conclusion'
   };
 
-  function appendSection(title, text) {
-    const h = document.createElement('h6');
-    h.className = 'mt-3 mb-1';
-    h.textContent = title;
+  function appendSection(label, text) {
+    const div = document.createElement('div');
+    div.className = 'ai-section';
+    const span = document.createElement('span');
+    span.className = 'ai-section-label';
+    span.textContent = label;
     const p = document.createElement('p');
-    p.className = 'text-muted mb-0';
     p.textContent = text;
+    div.appendChild(span);
+    div.appendChild(p);
+    body.appendChild(div);
+  }
+
+  function appendInsightGroup(title, entries, names) {
+    const rows = Object.keys(entries || {}).filter(function (id) {
+      return entries[id] && entries[id].indexOf('Insufficient') !== 0;
+    });
+    if (!rows.length) return;
+    const h = document.createElement('div');
+    h.className = 'ai-insight-heading';
+    h.textContent = title;
     body.appendChild(h);
-    body.appendChild(p);
+    rows.forEach(function (id) {
+      const item = document.createElement('div');
+      item.className = 'ai-insight';
+      const who = document.createElement('strong');
+      who.textContent = names[id] || '#' + id;
+      const p = document.createElement('p');
+      p.textContent = entries[id];
+      item.appendChild(who);
+      item.appendChild(p);
+      body.appendChild(item);
+    });
+  }
+
+  function showSkeleton() {
+    body.innerHTML = '';
+    foot.textContent = '';
+    for (let i = 0; i < 5; i++) {
+      const sk = document.createElement('div');
+      sk.className = 'ai-skeleton';
+      sk.style.width = (i % 2 === 0 ? '100%' : '72%');
+      body.appendChild(sk);
+    }
+    card.classList.remove('d-none');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   btn.addEventListener('click', function () {
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generating…';
+    if (sourceBadge) { sourceBadge.className = 'badge badge-soft-neutral'; sourceBadge.textContent = 'Generating…'; }
+    showSkeleton();
     const params = new URLSearchParams({
       csrf_token: window.APP_CSRF_TOKEN || '',
       committee_id: '<?= (int)$selectedCommitteeId ?>',
@@ -179,21 +231,25 @@ new Chart(document.getElementById('assignmentDistributionChart'), { type: 'bar',
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!data.success) { if (window.Swal) Swal.fire('Error', data.message || 'Analysis failed.', 'error'); return; }
+        if (!data.success) { card.classList.add('d-none'); if (window.Swal) Swal.fire('Error', data.message || 'Analysis failed.', 'error'); return; }
         body.innerHTML = '';
         Object.keys(SECTIONS).forEach(function (key) {
           if (data.analysis && data.analysis[key]) appendSection(SECTIONS[key], data.analysis[key]);
         });
-        if (data.analysis && data.analysis.committee_analysis) {
-          Object.keys(data.analysis.committee_analysis).forEach(function (cid) {
-            const text = data.analysis.committee_analysis[cid];
-            if (text && text.indexOf('Insufficient') !== 0) appendSection('Committee insight', text);
-          });
+        if (data.analysis) {
+          appendInsightGroup('Committee insights', data.analysis.committee_analysis, AI_NAMES.committees);
+          appendInsightGroup('Member insights', data.analysis.member_analysis, AI_NAMES.members);
         }
-        card.classList.remove('d-none');
+        if (sourceBadge) {
+          sourceBadge.className = 'badge ' + (data.ai ? 'bg-success-subtle text-success border border-success-subtle' : 'badge-soft-neutral');
+          sourceBadge.innerHTML = '<i class="bi ' + (data.ai ? 'bi-stars' : 'bi-cloud-slash') + '"></i> ' + (data.ai ? 'Gemini AI' : 'Offline draft');
+        }
+        if (foot) {
+          foot.textContent = (data.ai ? 'Generated by Gemini AI — ' : 'AI offline, factual draft — ') + 'a draft for review; verify against the data before acting. ' + new Date().toLocaleString();
+        }
         card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       })
-      .catch(function () { if (window.Swal) Swal.fire('Error', 'Analysis is temporarily unavailable.', 'error'); })
+      .catch(function () { card.classList.add('d-none'); if (window.Swal) Swal.fire('Error', 'Analysis is temporarily unavailable.', 'error'); })
       .finally(function () {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-stars"></i> Generate Analysis';

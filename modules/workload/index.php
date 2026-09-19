@@ -89,7 +89,7 @@ if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
           <?php else: ?>
             <div class="workload-committee-grid">
               <?php foreach ($jurisdictionCommittees as $committee): ?>
-                <a href="committee.php?committee_id=<?= (int)$committee['committee_id'] ?>" class="workload-committee-card">
+                <a href="committee.php?committee_id=<?= (int)$committee['committee_id'] ?>" class="workload-committee-card" data-committee-workload="<?= (int)$committee['committee_id'] ?>" data-committee-name="<?= e($committee['committee_name']) ?>">
                   <span class="workload-committee-inner">
                     <span class="workload-committee-form" aria-label="Committee icon"><i class="bi bi-people-fill workload-committee-card-icon"></i></span>
                     <span class="workload-committee-data">
@@ -107,6 +107,8 @@ if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
       </div>
     </div>
     <?php
+    $extraJs = [APP_URL . '/assets/js/workload.js'];
+    include __DIR__ . '/_workload_modal.php';
     include __DIR__ . '/../../layouts/footer.php';
     exit;
 }
@@ -235,6 +237,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const a = document.createElement('a');
             a.href = 'committee.php?committee_id=' + encodeURIComponent(c.committee_id);
             a.className = 'workload-committee-card';
+            a.setAttribute('data-committee-workload', c.committee_id);
+            a.setAttribute('data-committee-name', c.committee_name);
             a.innerHTML = '<span class="workload-committee-inner">'
               + '<span class="workload-committee-form"><i class="bi bi-people-fill workload-committee-card-icon"></i></span>'
               + '<span class="workload-committee-data"><span class="workload-committee-text">'
@@ -255,6 +259,8 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
     <?php
+    $extraJs = [APP_URL . '/assets/js/workload.js'];
+    include __DIR__ . '/_workload_modal.php';
     include __DIR__ . '/../../layouts/footer.php';
     exit;
 }
@@ -458,21 +464,28 @@ include __DIR__ . '/../../layouts/header.php';
   <?php if ($selectedCommitteeId > 0): ?>
     <div class="card mb-3">
       <div class="card-body py-3">
-        <form id="filterForm" class="row g-2 align-items-center">
-          <div class="col-md-4">
-            <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search task title...">
-          </div>
-          
-          <div class="col-md-2">
-          </div>
-          <div class="col-md-3">
-            <select class="form-select form-select-sm" name="priority">
-              <option value="">All Priorities</option>
-              <?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?>
-                <option value="<?= e($p) ?>"><?= e($p) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
+        <form id="filterForm" class="d-flex flex-wrap gap-2 align-items-center">
+          <input type="hidden" name="committee_id" value="<?= (int)$selectedCommitteeId ?>">
+          <input type="text" class="form-control form-control-sm" id="searchInput" name="search" placeholder="Search task title..." style="min-width:200px;">
+          <select class="form-select form-select-sm" name="priority" style="min-width:130px;">
+            <option value="">All Priorities</option>
+            <?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?>
+              <option value="<?= e($p) ?>"><?= e($p) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <select class="form-select form-select-sm" name="sort" aria-label="Sort by" style="min-width:130px;">
+            <option value="due_date" selected>Due date</option>
+            <option value="task_title">Title</option>
+            <option value="priority">Priority</option>
+          </select>
+          <select class="form-select form-select-sm" name="dir" aria-label="Sort direction" style="min-width:90px;">
+            <option value="asc" selected>Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+          <button type="submit" class="btn btn-primary btn-sm position-relative" id="filterApply">
+            <i class="bi bi-check2"></i> Apply<span class="apply-pending-dot d-none" id="applyPendingDot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="filterReset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
         </form>
       </div>
     </div>
@@ -498,7 +511,7 @@ include __DIR__ . '/../../layouts/header.php';
 
 <?php if (canManage()): ?>
 <div class="modal fade" id="taskModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <form id="taskForm">
         <?= csrfField() ?>

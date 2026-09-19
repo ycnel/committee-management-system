@@ -142,7 +142,6 @@
               tbody.appendChild(tr);
             });
           }
-          document.getElementById('jvFullView').href = 'view.php?id=' + encodeURIComponent(j.jurisdiction_id);
           viewModal.show();
         })
         .catch(function () { appToast('error', 'Unable to load jurisdiction right now.'); });
