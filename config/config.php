@@ -21,11 +21,35 @@ function cmas_env(array $keys, string $default = ''): string
     }
     return $default;
 }
-define('DB_HOST', cmas_env(['DB_HOST'], 'localhost'));
-define('DB_PORT', cmas_env(['DB_PORT'], '3306'));
-define('DB_NAME', cmas_env(['DB_DATABASE', 'DB_NAME'], 'committee_management_db'));
-define('DB_USER', cmas_env(['DB_USERNAME', 'DB_USER'], 'root'));
-define('DB_PASS', cmas_env(['DB_PASSWORD', 'DB_PASS'], ''));
+
+// Fallback: parse DATABASE_URL (mysql://user:pass@host:port/dbname)
+$cmasDbUrl = [];
+$cmasRawUrl = cmas_env(['DATABASE_URL']);
+if ($cmasRawUrl !== '') {
+    $parsed = parse_url($cmasRawUrl);
+    if (is_array($parsed)) {
+        $cmasDbUrl = [
+            'host' => $parsed['host'] ?? '',
+            'port' => isset($parsed['port']) ? (string)$parsed['port'] : '',
+            'name' => isset($parsed['path']) ? ltrim($parsed['path'], '/') : '',
+            'user' => isset($parsed['user']) ? urldecode($parsed['user']) : '',
+            'pass' => isset($parsed['pass']) ? urldecode($parsed['pass']) : '',
+        ];
+    }
+}
+
+$cmasDbHost = cmas_env(['DB_HOST'], $cmasDbUrl['host'] ?? '') ?: 'localhost';
+// "localhost" makes PDO use a unix socket, which does not exist on the host.
+// Force TCP instead.
+if (strtolower($cmasDbHost) === 'localhost') {
+    $cmasDbHost = '127.0.0.1';
+}
+
+define('DB_HOST', $cmasDbHost);
+define('DB_PORT', cmas_env(['DB_PORT'], ($cmasDbUrl['port'] ?? '') ?: '3306'));
+define('DB_NAME', cmas_env(['DB_DATABASE', 'DB_NAME'], ($cmasDbUrl['name'] ?? '') ?: 'committee_management_db'));
+define('DB_USER', cmas_env(['DB_USERNAME', 'DB_USER'], ($cmasDbUrl['user'] ?? '') ?: 'root'));
+define('DB_PASS', cmas_env(['DB_PASSWORD', 'DB_PASS'], $cmasDbUrl['pass'] ?? ''));
 define('DB_CHARSET', 'utf8mb4');
 
 // ---- Application settings -----------------------------------------
