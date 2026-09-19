@@ -46,19 +46,83 @@ include __DIR__ . '/../../layouts/header.php';
 
   <div class="card mb-3">
     <div class="card-body py-3">
-      <form id="filterForm" class="row g-2 align-items-center">
-        <div class="col-md-5">
-          <input type="text" class="form-control form-control-sm" id="searchInput" name="search"
-                 placeholder="Search committee name or description...">
+      <form id="filterForm" class="d-flex flex-wrap align-items-end gap-3">
+        <span class="badge badge-soft-neutral d-none align-self-center" id="activeFilterCount"></span>
+        <div style="min-width:230px;flex:1 1 230px;">
+          <label class="form-label small mb-1" for="searchInput">Search</label>
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control" id="searchInput" name="search"
+                   placeholder="Committee name or description...">
+          </div>
         </div>
-        
-        <div class="col-md-3">
-          <select class="form-select form-select-sm" name="status">
+        <div>
+          <label class="form-label small mb-1">Status</label>
+          <select class="form-select form-select-sm" name="status" aria-label="Filter by status" style="min-width:120px;">
             <option value="">All Statuses</option>
-            <?php foreach (['Active', 'Inactive'] as $s): ?>
+            <?php foreach (['Active', 'Inactive', 'Dissolved'] as $s): ?>
               <option value="<?= e($s) ?>"><?= e($s) ?></option>
             <?php endforeach; ?>
           </select>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Jurisdiction</label>
+          <select class="form-select form-select-sm" name="jurisdiction_id" aria-label="Filter by jurisdiction" style="min-width:180px;">
+            <option value="">All Jurisdictions</option>
+            <?php foreach ($jurisdictions as $j): ?>
+              <option value="<?= (int)$j['jurisdiction_id'] ?>"><?= e($j['jurisdiction_name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Members</label>
+          <select class="form-select form-select-sm" name="members" aria-label="Filter by member count" style="min-width:120px;">
+            <option value="">Any size</option>
+            <option value="none">No members</option>
+            <option value="1-5">1–5 members</option>
+            <option value="6+">6+ members</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Assignments</label>
+          <select class="form-select form-select-sm" name="work" aria-label="Filter by open assignments" style="min-width:170px;">
+            <option value="">Any</option>
+            <option value="open">With open assignments</option>
+            <option value="none">No open assignments</option>
+          </select>
+        </div>
+        <div class="d-flex align-items-end gap-1">
+          <div>
+            <label class="form-label small mb-1">Created from</label>
+            <input type="date" name="created_from" class="form-control form-control-sm" style="min-width:140px;">
+          </div>
+          <span class="pb-1 text-muted small"><i class="bi bi-arrow-right"></i></span>
+          <div>
+            <label class="form-label small mb-1">To</label>
+            <input type="date" name="created_to" class="form-control form-control-sm" style="min-width:140px;">
+          </div>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Sort</label>
+          <select class="form-select form-select-sm" name="sort" aria-label="Sort by" style="min-width:140px;">
+            <option value="committee_name">Name</option>
+            <option value="member_count">Members</option>
+            <option value="status">Status</option>
+            <option value="date_created">Date created</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label small mb-1">Direction</label>
+          <select class="form-select form-select-sm" name="dir" aria-label="Sort direction" style="min-width:90px;">
+            <option value="asc">Asc</option>
+            <option value="desc">Desc</option>
+          </select>
+        </div>
+        <div class="ms-auto d-flex gap-2">
+          <button type="submit" class="btn btn-primary btn-sm position-relative" id="filterApply">
+            <i class="bi bi-check2"></i> Apply<span class="apply-pending-dot d-none" id="applyPendingDot" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="filterReset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
         </div>
       </form>
     </div>
@@ -122,6 +186,6 @@ include __DIR__ . '/../../layouts/header.php';
 <?php endif; ?>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/committees.js'];
+$extraJs = [APP_URL . '/assets/js/committees.js?v=3'];
 include __DIR__ . '/../../layouts/footer.php';
 ?>

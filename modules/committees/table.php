@@ -12,6 +12,12 @@ $pdo = db();
 $search       = clean($_GET['search'] ?? '');
 $jurisdiction = (int)($_GET['jurisdiction_id'] ?? 0);
 $statusFil    = clean($_GET['status'] ?? '');
+$membersFil   = clean($_GET['members'] ?? '');
+$workFil      = clean($_GET['work'] ?? '');
+$createdFrom  = clean($_GET['created_from'] ?? '');
+$createdTo    = clean($_GET['created_to'] ?? '');
+$createdFrom  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $createdFrom) ? $createdFrom : '';
+$createdTo    = preg_match('/^\d{4}-\d{2}-\d{2}$/', $createdTo) ? $createdTo : '';
 
 $sortableColumns = ['committee_name', 'status', 'date_created', 'member_count'];
 $sortBy  = in_array($_GET['sort'] ?? '', $sortableColumns, true) ? $_GET['sort'] : 'committee_name';
@@ -25,6 +31,17 @@ if ($search !== '') {
 }
 if ($jurisdiction > 0) { $where[] = 'c.jurisdiction_id = :jid'; $params[':jid'] = $jurisdiction; }
 if ($statusFil !== '') { $where[] = 'c.status = :status'; $params[':status'] = $statusFil; }
+if ($createdFrom !== '') { $where[] = 'DATE(c.date_created) >= :cfrom'; $params[':cfrom'] = $createdFrom; }
+if ($createdTo !== '')   { $where[] = 'DATE(c.date_created) <= :cto';   $params[':cto'] = $createdTo; }
+
+$memberCountSql = "(SELECT COUNT(*) FROM committee_members cm WHERE cm.committee_id = c.committee_id AND cm.status = 'Active')";
+if ($membersFil === 'none') { $where[] = "$memberCountSql = 0"; }
+elseif ($membersFil === '1-5') { $where[] = "$memberCountSql BETWEEN 1 AND 5"; }
+elseif ($membersFil === '6+') { $where[] = "$memberCountSql >= 6"; }
+
+$openWorkSql = "EXISTS (SELECT 1 FROM committee_members cm2 INNER JOIN workload_assignments wa ON wa.committee_member_id = cm2.committee_member_id WHERE cm2.committee_id = c.committee_id AND wa.status <> 'Completed')";
+if ($workFil === 'open') { $where[] = $openWorkSql; }
+elseif ($workFil === 'none') { $where[] = "NOT $openWorkSql"; }
 if (isCommitteeMember()) {
   $where[] = 'c.committee_id IN (SELECT committee_id FROM committee_members WHERE user_id = :member_uid AND status = \'Active\')';
   $params[':member_uid'] = currentUserId();
@@ -49,14 +66,6 @@ $rows = $stmt->fetchAll();
 
 $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' => 'danger'];
 ?>
-<div class="committee-list-toolbar">
-  <span class="small text-muted">Sort committees by:</span>
-  <a href="#" class="sort-link" data-sort="committee_name">Name <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="member_count">Members <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="status">Status <i class="bi bi-arrow-down-up sort-icon"></i></a>
-  <a href="#" class="sort-link" data-sort="date_created">Date created <i class="bi bi-arrow-down-up sort-icon"></i></a>
-</div>
-
 <?php if (empty($rows)): ?>
   <div class="committee-empty-state text-center text-muted py-5">No committees found.</div>
 <?php else: ?>
