@@ -25,19 +25,42 @@ document.addEventListener('DOMContentLoaded', function () {
     if (idleExpiryShown) return;
     idleExpiryShown = true;
     const idleMinutes = Math.ceil(idleTimeout / 60000);
-    const message = 'You have been inactive for ' + idleMinutes + ' minutes. Please log in again.';
+    const message = 'You have been inactive for ' + idleMinutes + ' minutes.';
     if (window.Swal) {
       Swal.fire({
         icon: 'warning',
-        title: 'Session Expired',
+        title: 'Session Expiring',
         text: message,
-        confirmButtonText: 'Go to Login',
+        showCancelButton: true,
+        confirmButtonText: 'Stay signed in',
+        cancelButtonText: 'Log out',
         allowOutsideClick: false
-      }).then(function () {
-        window.location.href = window.APP_URL + '/logout.php?timeout=1';
+      }).then(function (result) {
+        if (!result.isConfirmed) {
+          window.location.href = window.APP_URL + '/logout.php?timeout=1';
+          return;
+        }
+        // "Stay" only works if the server-side session is still alive.
+        fetch(window.APP_URL + '/auth/session_check.php', {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          cache: 'no-store'
+        })
+          .then(function (response) { return response.json(); })
+          .then(function (data) {
+            if (data.session_expired || data.session_replaced || !data.success) {
+              window.location.href = window.APP_URL + '/logout.php?timeout=1';
+              return;
+            }
+            idleExpiryShown = false;
+            idleWarningShown = false;
+            resetIdleTimer();
+          })
+          .catch(function () {
+            window.location.href = window.APP_URL + '/logout.php?timeout=1';
+          });
       });
     } else {
-      window.alert(message);
+      window.alert(message + ' Please log in again.');
       window.location.href = window.APP_URL + '/logout.php?timeout=1';
     }
   }
@@ -98,6 +121,10 @@ document.addEventListener('DOMContentLoaded', function () {
           .catch(function () {
             expireForInactivity();
           });
+        return;
+      }
+      if (result.dismiss === Swal.DismissReason.cancel) {
+        window.location.href = window.APP_URL + '/logout.php';
         return;
       }
       expireForInactivity();
