@@ -132,7 +132,7 @@ include __DIR__ . '/../../layouts/header.php';
           </div>
           <div class="col-md-4">
             <label class="form-label small">Gemini Model</label>
-            <input type="text" class="form-control form-control-sm" id="gemini_model" name="gemini_model" value="<?= e($geminiConfig['model']) ?>" placeholder="gemini-3.5-flash">
+            <input type="text" class="form-control form-control-sm" id="gemini_model" name="gemini_model" value="<?= e($geminiConfig['model']) ?>" placeholder="gemini-2.5-flash">
           </div>
           <div class="col-md-2">
             <label class="form-label small">Timeout (s)</label>

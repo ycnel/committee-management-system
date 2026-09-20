@@ -78,7 +78,7 @@ class GeminiAI
 
         $this->enabled        = ($merged['gemini_enabled'] ?? '1') === '1';
         $this->model           = $merged['gemini_model'] ?? GEMINI_MODEL;
-        if (in_array($this->model, ['gemini-2.5-flash', 'qwen2.5:1.5b'], true)) {
+        if (in_array($this->model, ['gemini-3.5-flash', 'gemini-3.0-flash', 'qwen2.5:1.5b'], true)) {
             $this->model = GEMINI_MODEL;
         }
         $this->apiKey          = trim((string)getenv('GEMINI_API_KEY'));
