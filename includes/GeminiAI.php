@@ -37,6 +37,9 @@ class GeminiAI
     private int $timeout;
     private int $connectTimeout;
 
+    /** Alternate models tried in order when the configured model fails (404/429/503). */
+    private const FALLBACK_MODELS = ['gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-2.5-flash'];
+
     private const VALID_PRIORITY = ['Low', 'Medium', 'High', 'Urgent'];
     private const MAX_DESCRIPTION_LEN = 1000;
     private const MAX_REASONING_LEN = 500;
@@ -191,7 +194,9 @@ class GeminiAI
         }
 
         $availability = $this->checkAvailability();
-        if (!$availability['online'] || !$availability['model_found']) {
+        // Only require the API to be reachable — a missing configured
+        // model is handled by the model failover in callGemini().
+        if (!$availability['online']) {
             return ['available' => false, 'sections' => []];
         }
 
@@ -274,10 +279,9 @@ class GeminiAI
         }
 
         $availability = $this->checkAvailability();
+        // Only require the API to be reachable — a missing configured
+        // model is handled by the model failover in callGemini().
         if (!$availability['online']) {
-            return $this->fallback($availability['message'], $start);
-        }
-        if (!$availability['model_found']) {
             return $this->fallback($availability['message'], $start);
         }
 
@@ -415,10 +419,11 @@ PROMPT;
             'generationConfig' => ['temperature' => 0.3, 'responseMimeType' => 'application/json'],
         ];
 
-        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($this->model) . ':generateContent?key=' . rawurlencode($this->apiKey);
-        $response = false; $errno = 0; $err = ''; $httpCode = 0;
-        // Google intermittently 503s under shared-tier load — one retry masks most of it.
-        for ($attempt = 0; $attempt < 2; $attempt++) {
+        // Try the configured model first, then each fallback on failure.
+        $models = array_values(array_unique(array_merge([$this->model], self::FALLBACK_MODELS)));
+        $response = false; $errno = 0; $err = ''; $httpCode = 0; $usedModel = $this->model;
+        foreach ($models as $model) {
+            $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($model) . ':generateContent?key=' . rawurlencode($this->apiKey);
             $ch = curl_init($url);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
@@ -433,8 +438,14 @@ PROMPT;
             $err = curl_error($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
-            if (!in_array($httpCode, [429, 503], true)) break;
-            if ($attempt === 0) usleep(1500000);
+            if ($httpCode === 200) { $usedModel = $model; break; }
+            // Only fail over on model-specific errors; network/timeout aborts immediately.
+            if ($errno !== 0) break;
+        }
+
+        if ($httpCode === 200 && $usedModel !== $this->model) {
+            $this->model = $usedModel;
+            try { self::saveSetting($this->pdo, 'gemini_model', $usedModel); } catch (Throwable $e) { /* persistence is best-effort */ }
         }
 
         if ($errno === CURLE_OPERATION_TIMEDOUT) {
@@ -444,7 +455,7 @@ PROMPT;
             throw new RuntimeException('Could not connect to Gemini: ' . $err);
         }
         if ($httpCode !== 200) {
-            throw new RuntimeException("Gemini returned HTTP {$httpCode}.");
+            throw new RuntimeException("Gemini returned HTTP {$httpCode} (last model tried: {$model}).");
         }
 
         $decoded = json_decode($response, true);
