@@ -78,7 +78,7 @@ class GeminiAI
 
         $this->enabled        = ($merged['gemini_enabled'] ?? '1') === '1';
         $this->model           = $merged['gemini_model'] ?? GEMINI_MODEL;
-        if (in_array($this->model, ['gemini-3.5-flash', 'gemini-3.0-flash', 'qwen2.5:1.5b'], true)) {
+        if (in_array($this->model, ['gemini-3.5-flash', 'gemini-3.0-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'qwen2.5:1.5b'], true)) {
             $this->model = GEMINI_MODEL;
         }
         $this->apiKey          = trim((string)getenv('GEMINI_API_KEY'));
@@ -416,20 +416,26 @@ PROMPT;
         ];
 
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . rawurlencode($this->model) . ':generateContent?key=' . rawurlencode($this->apiKey);
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-            CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
-            CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
-            CURLOPT_TIMEOUT => $this->timeout,
-        ]);
-        $response = curl_exec($ch);
-        $errno = curl_errno($ch);
-        $err = curl_error($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $response = false; $errno = 0; $err = ''; $httpCode = 0;
+        // Google intermittently 503s under shared-tier load — one retry masks most of it.
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+                CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
+                CURLOPT_CONNECTTIMEOUT => $this->connectTimeout,
+                CURLOPT_TIMEOUT => $this->timeout,
+            ]);
+            $response = curl_exec($ch);
+            $errno = curl_errno($ch);
+            $err = curl_error($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if (!in_array($httpCode, [429, 503], true)) break;
+            if ($attempt === 0) usleep(1500000);
+        }
 
         if ($errno === CURLE_OPERATION_TIMEDOUT) {
             throw new RuntimeException('Gemini request timed out after ' . $this->timeout . 's.');

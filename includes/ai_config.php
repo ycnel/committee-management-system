@@ -16,7 +16,7 @@
  */
 
 if (!defined('GEMINI_ENABLED'))  define('GEMINI_ENABLED', true);
-if (!defined('GEMINI_MODEL'))    define('GEMINI_MODEL', 'gemini-2.5-flash');
+if (!defined('GEMINI_MODEL'))    define('GEMINI_MODEL', 'gemini-3-flash-preview');
 if (!defined('GEMINI_TIMEOUT'))  define('GEMINI_TIMEOUT', 30); // seconds, request timeout
 if (!defined('GEMINI_CONNECT_TIMEOUT')) define('GEMINI_CONNECT_TIMEOUT', 5); // seconds, TCP connect timeout
 if (!defined('GEMINI_CACHE_MINUTES')) define('GEMINI_CACHE_MINUTES', 10); // reuse a recent AI answer if candidate data hasn't changed
