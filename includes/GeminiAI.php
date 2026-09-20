@@ -38,7 +38,7 @@ class GeminiAI
     private int $connectTimeout;
 
     /** Alternate models tried in order when the configured model fails (404/429/503). */
-    private const FALLBACK_MODELS = ['gemini-3-flash-preview', 'gemini-flash-latest', 'gemini-2.5-flash'];
+    private const FALLBACK_MODELS = ['gemini-3-flash-preview', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-flash'];
 
     private const VALID_PRIORITY = ['Low', 'Medium', 'High', 'Urgent'];
     private const MAX_DESCRIPTION_LEN = 1000;
