@@ -1,0 +1,242 @@
+/**
+ * assets/css/messages.css
+ * ------------------------------------------------------------------
+ * Floating "Messages" panel (committee group chat), Messenger-style.
+ * Reuses the app's existing design tokens (assets/css/style.css) so it
+ * matches the rest of the UI instead of introducing a new palette.
+ * ------------------------------------------------------------------
+ */
+
+/* Badge on the Message header button — same shape/position as the bell's. */
+.message-unread-badge {
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 5px;
+  min-width: 16px;
+}
+
+.message-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 0;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  height: 520px;
+  max-height: calc(100vh - 96px);
+  background: var(--n-surface, #fff);
+  border: 1px solid var(--n-border, #E5E7EB);
+  border-bottom: none;
+  border-radius: var(--radius-lg, 12px) var(--radius-lg, 12px) 0 0;
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(10, 10, 11, 0.16));
+  display: flex;
+  flex-direction: column;
+  z-index: 1040; /* above .sidebar (1000) and .topnav (900) */
+  overflow: hidden;
+  transform: translateY(16px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.message-panel.is-open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (max-width: 480px) {
+  .message-panel {
+    right: 12px;
+    left: 12px;
+    width: auto;
+    height: 70vh;
+  }
+}
+
+.message-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--n-border, #E5E7EB);
+  flex-shrink: 0;
+}
+.message-panel-header-title {
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--n-text, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.message-panel-icon-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 8px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--n-text-muted, #71717a);
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.message-panel-icon-btn:hover { background: var(--ln-surface-2, #f4f4f6); color: var(--n-text, #111827); }
+
+.message-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ---- Conversation list ---- */
+.message-conv-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.message-conv-item:hover { background: var(--ln-surface-2, #f4f4f6); }
+.message-conv-item .avatar-circle { background: var(--ln-teal, #02b8cc); flex-shrink: 0; }
+.message-conv-text { flex: 1; min-width: 0; }
+.message-conv-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--n-text, #111827);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.message-conv-item.has-unread .message-conv-name { font-weight: 700; }
+.message-conv-preview {
+  font-size: 12.5px;
+  color: var(--n-text-muted, #71717a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.message-conv-item.has-unread .message-conv-preview { color: var(--n-text, #111827); font-weight: 560; }
+.message-conv-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.message-conv-time { font-size: 11px; color: var(--n-text-faint, #a1a1aa); white-space: nowrap; }
+.message-conv-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ln-red, #eb5757);
+}
+
+.message-panel-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--n-text-muted, #71717a);
+  font-size: 13px;
+}
+.message-panel-empty i { font-size: 26px; display: block; margin-bottom: 8px; color: var(--n-text-faint, #a1a1aa); }
+
+/* ---- Thread view ---- */
+.message-thread {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.message-thread-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.message-thread-loadmore {
+  align-self: center;
+  font-size: 12px;
+  color: var(--n-text-muted, #71717a);
+  background: transparent;
+  border: 1px solid var(--n-border, #E5E7EB);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.message-thread-loadmore:hover { background: var(--ln-surface-2, #f4f4f6); }
+
+.message-bubble-row { display: flex; flex-direction: column; max-width: 82%; }
+.message-bubble-row.is-mine { align-self: flex-end; align-items: flex-end; }
+.message-bubble-row.is-theirs { align-self: flex-start; align-items: flex-start; }
+.message-bubble-sender {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--n-text-muted, #71717a);
+  margin: 0 4px 2px;
+}
+.message-bubble {
+  padding: 8px 12px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.message-bubble-row.is-mine .message-bubble {
+  background: var(--ln-text-heading, #0a0a0b);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.message-bubble-row.is-theirs .message-bubble {
+  background: var(--ln-surface-2, #f4f4f6);
+  color: var(--n-text, #111827);
+  border-bottom-left-radius: 4px;
+}
+.message-bubble-time {
+  font-size: 10.5px;
+  color: var(--n-text-faint, #a1a1aa);
+  margin: 3px 4px 0;
+}
+
+.message-thread-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--n-border, #E5E7EB);
+  flex-shrink: 0;
+}
+.message-thread-input {
+  flex: 1;
+  resize: none;
+  max-height: 84px;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--n-border, #E5E7EB);
+  border-radius: 18px;
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--n-text, #111827);
+  background: var(--n-surface, #fff);
+}
+.message-thread-input:focus { outline: none; border-color: var(--ln-border-strong, #d4d4d8); }
+.message-thread-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ln-text-heading, #0a0a0b);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease;
+}
+.message-thread-send:disabled { opacity: 0.4; cursor: default; }
+.message-thread-send:not(:disabled):hover { opacity: 0.85; }

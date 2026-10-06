@@ -24,5 +24,12 @@ $stmt = $pdo->prepare(
 );
 $stmt->execute([':cid' => $committeeId]);
 $members = $stmt->fetchAll();
+$availabilityMap = committeeAvailabilityMap($pdo, $committeeId);
+foreach ($members as &$member) {
+    $status = $availabilityMap[(int)$member['committee_member_id']]['status'] ?? 'Available';
+    $member['availability_status'] = $status;
+    $member['availability_label'] = availabilityStatusMeta($status)['label'];
+}
+unset($member);
 
 jsonResponse(true, '', ['members' => $members]);

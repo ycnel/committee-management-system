@@ -2,8 +2,10 @@
 /**
  * modules/workload/ajax_save.php
  * ------------------------------------------------------------------
- * Handles CREATE and UPDATE for the `workload_assignments` table
- * (id=0 means create). This is the "Calculate Workload" write path:
+ * Handles assignment updates and task proposal creation (id=0). New
+ * proposals wait for committee chairperson or Administrator review
+ * before a workload assignment is created.
+ * is created. This is the "Calculate Workload" write path:
  * assignment fields stay focused on title, description, priority, dates,
  * and the assigned committee member.
  *
@@ -15,6 +17,7 @@
  */
 
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/task_approval.php';
 requireLogin();
 
 if (!canManage()) jsonResponse(false, 'You do not have permission to perform this action.');
@@ -40,8 +43,56 @@ if (!empty($errors)) jsonResponse(false, implode(' ', $errors));
 
 $pdo = db();
 
-$memberCheck = $pdo->prepare('SELECT committee_member_id, user_id FROM committee_members WHERE committee_member_id = :id AND status = \'Active\'');
-$memberCheck->execute([':id' => $committeeMemberId]);
+$committeeId = (int)($_POST['committee_id'] ?? 0);
+$jurisdictionId = (int)($_POST['jurisdiction_id'] ?? 0);
+$taskTemplateId = (int)($_POST['task_template_id'] ?? 0);
+
+if ($id <= 0) {
+    $committeeJurisdictionCheck = $pdo->prepare(
+        "SELECT 1
+         FROM committees c
+         INNER JOIN jurisdictions j
+                 ON j.jurisdiction_id = :jid
+                AND j.status = 'Active'
+         WHERE c.committee_id = :cid
+           AND c.status = 'Active'
+           AND (c.jurisdiction_id = j.jurisdiction_id OR j.category = c.committee_name)
+         LIMIT 1"
+    );
+    $committeeJurisdictionCheck->execute([
+        ':cid' => $committeeId,
+        ':jid' => $jurisdictionId,
+    ]);
+    if (!$committeeJurisdictionCheck->fetchColumn()) {
+        jsonResponse(false, 'The selected committee does not belong to the selected jurisdiction.');
+    }
+
+    if ($taskTemplateId <= 0) {
+        jsonResponse(false, 'Please select a standard task template.');
+    }
+    $templateCheck = $pdo->prepare(
+        'SELECT 1 FROM task_templates
+         WHERE id = :id AND is_active = 1
+           AND (jurisdiction_id IS NULL OR jurisdiction_id = :jurisdiction_id)
+         LIMIT 1'
+    );
+    $templateCheck->execute([
+        ':id' => $taskTemplateId,
+        ':jurisdiction_id' => $jurisdictionId,
+    ]);
+    if (!$templateCheck->fetchColumn()) {
+        jsonResponse(false, 'The selected standard task is not available for this jurisdiction.');
+    }
+}
+
+$memberCheckSql = 'SELECT committee_member_id, user_id, committee_id FROM committee_members WHERE committee_member_id = :id AND status = \'Active\'';
+$memberCheckParams = [':id' => $committeeMemberId];
+if ($id <= 0) {
+    $memberCheckSql .= ' AND committee_id = :committee_id';
+    $memberCheckParams[':committee_id'] = $committeeId;
+}
+$memberCheck = $pdo->prepare($memberCheckSql);
+$memberCheck->execute($memberCheckParams);
 $member = $memberCheck->fetch();
 if (!$member) jsonResponse(false, 'Selected committee member is invalid or inactive.');
 
@@ -65,28 +116,48 @@ if ($duplicateTaskStmt->fetch()) {
     jsonResponse(false, 'A task with this title is already assigned to this member for the selected due date.');
 }
 
+// CREATE only: also block a duplicate *proposal* (same title/member/due
+// date already awaiting response or accepted) — the check above only
+// catches confirmed workload_assignments, which a brand-new proposal
+// obviously isn't yet.
+if ($id <= 0) {
+    $duplicateProposalStmt = $pdo->prepare(
+        'SELECT proposal_id FROM workload_assignment_proposals
+         WHERE committee_member_id = :committee_member_id
+           AND LOWER(TRIM(task_title)) = LOWER(TRIM(:task_title))
+           AND ((due_date = :due_date_match) OR (due_date IS NULL AND :due_date_null IS NULL))
+           AND state IN ("Pending", "Awaiting Response", "Accepted")
+         LIMIT 1'
+    );
+    $duplicateProposalStmt->execute([
+        ':committee_member_id' => $committeeMemberId,
+        ':task_title' => $title,
+        ':due_date_match' => $dueDate,
+        ':due_date_null' => $dueDate,
+    ]);
+    if ($duplicateProposalStmt->fetch()) {
+        jsonResponse(false, 'This member already has a pending proposal with this title and due date.');
+    }
+}
+
 /**
  * Links this saved task back to the AI recommendation log row (if the
  * task was created via "Generate with AI") and records whether the
  * admin's final choice of member matches what the AI recommended.
  * Non-fatal: the task itself always saves even if this bookkeeping
  * step fails for any reason.
+ *
+ * Thin wrapper kept here for the UPDATE branch below (editing the
+ * assignee of an already-approved task directly, bypassing the
+ * proposal workflow — an existing Administrator/Chairperson power-user
+ * path this revision doesn't change). The proposal-approval path
+ * (modules/workload/ajax_approve.php) calls the same shared
+ * includes/workload_proposals.php::linkAiRecommendationOutcome()
+ * directly instead of duplicating this logic.
  */
 function cmas_link_ai_recommendation(PDO $pdo, int $recommendationId, int $workloadId, int $finalCommitteeMemberId): void
 {
-    $stmt = $pdo->prepare(
-        "UPDATE ai_recommendations
-         SET workload_id = :wid,
-             final_member_id = :final,
-             admin_followed_ai = (ai_recommended_member_id IS NOT NULL AND ai_recommended_member_id = :final2)
-         WHERE recommendation_id = :rid"
-    );
-    $stmt->execute([
-        ':wid' => $workloadId,
-        ':final' => $finalCommitteeMemberId,
-        ':final2' => $finalCommitteeMemberId,
-        ':rid' => $recommendationId,
-    ]);
+    linkAiRecommendationOutcome($pdo, $recommendationId, $workloadId, $finalCommitteeMemberId);
 }
 
 try {
@@ -140,36 +211,63 @@ try {
     }
 
     // ---- CREATE ----
+    // New task proposals require review before an assignment is created.
+    // Existing member-response proposals retain their established workflow.
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare(
-        'INSERT INTO workload_assignments (committee_member_id, task_title, task_description, priority,
-         assigned_date, due_date, created_at)
-         VALUES (:cmid, :title, :desc, :priority, CURDATE(), :due, NOW())'
+        'INSERT INTO workload_assignment_proposals
+         (committee_member_id, task_template_id, jurisdiction_id, task_title, task_description, priority, due_date, ai_recommendation_id, proposed_by, proposed_at, state)
+         VALUES (:cmid, :template_id, :jurisdiction_id, :title, :desc, :priority, :due, :ai_rec, :proposed_by, NOW(), "Pending")'
     );
     $stmt->execute([
-        ':cmid' => $committeeMemberId, ':title' => $title, ':desc' => $description,
+        ':cmid' => $committeeMemberId, ':template_id' => $taskTemplateId,
+        ':jurisdiction_id' => $jurisdictionId, ':title' => $title, ':desc' => $description,
         ':priority' => $priority, ':due' => $dueDate,
+        ':ai_rec' => $aiRecommendationId, ':proposed_by' => currentUserId(),
     ]);
-    $id = (int)$pdo->lastInsertId();
+    $proposalId = (int)$pdo->lastInsertId();
 
-    if ($aiRecommendationId) {
-        try {
-            cmas_link_ai_recommendation($pdo, $aiRecommendationId, $id, $committeeMemberId);
-        } catch (Throwable $e) {
-            // Non-fatal: the task itself was saved successfully; only the AI audit trail failed to link.
-            error_log('AI recommendation outcome tracking failed: ' . $e->getMessage());
+    $activityId = logActivity(
+        currentUserId(),
+        'Submit Task Proposal',
+        'Submitted task proposal #' . $proposalId . ' (' . $title . ') for committee chairperson or Administrator review'
+    );
+    $reviewerIds = taskApprovalReviewRecipients($pdo, (int)$member['committee_id']);
+    if (!$reviewerIds) {
+        throw new RuntimeException('No active Administrator or Committee Chairperson is available to review task proposals.');
+    }
+    $notificationUrl = APP_URL . '/modules/workload/task_requests.php?request_id=' . $proposalId;
+    foreach ($reviewerIds as $reviewerId) {
+        createNotification(
+            $reviewerId,
+            'Pending Task Request #' . $proposalId . ': ' . $title . ' was submitted by '
+                . (currentUser()['full_name'] ?? 'a user') . ' for review by the committee chairperson or Administrator.',
+            $notificationUrl,
+            $activityId
+        );
+        $notificationCheck = $pdo->prepare(
+            'SELECT 1 FROM notifications
+             WHERE recipient_user_id = :recipient_id
+               AND activity_log_id <=> :activity_id AND url = :url
+             LIMIT 1'
+        );
+        $notificationCheck->execute([
+            ':recipient_id' => $reviewerId,
+            ':activity_id' => $activityId,
+            ':url' => $notificationUrl,
+        ]);
+        if (!$notificationCheck->fetchColumn()) {
+            throw new RuntimeException('A task reviewer notification could not be created for this proposal.');
         }
     }
+    $pdo->commit();
+    jsonResponse(true, 'Task proposal submitted and is pending review by the committee chairperson or Administrator.', ['proposal_id' => $proposalId]);
 
-    $activityId = logActivity(currentUserId(), 'Insert', 'Created task #' . $id . ' (' . $title . ')');
-    createNotification(
-        (int)$member['user_id'],
-        'New task assigned to you: ' . $title,
-        APP_URL . '/modules/workload/task.php?id=' . $id,
-        $activityId
-    );
-    jsonResponse(true, 'Task assigned successfully.', ['id' => $id]);
-
+} catch (RuntimeException $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    jsonResponse(false, $e->getMessage());
 } catch (PDOException $e) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
     error_log('Workload save error: ' . $e->getMessage());
     if ((int)$e->getCode() === 23000 || str_contains(strtolower($e->getMessage()), 'uq_workload_member_task_due')) {
         jsonResponse(false, 'A task with this title is already assigned to this member for the selected due date.');

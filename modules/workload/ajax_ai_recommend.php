@@ -116,10 +116,30 @@ try {
          WHERE cm.committee_id = :cid AND cm.status = 'Active'"
     );
     $memberStmt->execute([':cid' => $committeeId]);
-    $rows = $memberStmt->fetchAll();
+    $allRows = $memberStmt->fetchAll();
+
+    if (empty($allRows)) {
+        jsonResponse(true, 'This committee has no active members yet.', ['result' => null]);
+    }
+
+    $availabilityMap = committeeAvailabilityMap($pdo, $committeeId);
+    $rows = [];
+    $excludedUnavailable = [];
+    foreach ($allRows as $memberRow) {
+        $committeeMemberId = (int)$memberRow['committee_member_id'];
+        $status = $availabilityMap[$committeeMemberId]['status'] ?? 'Available';
+        if (in_array($status, AVAILABILITY_ELIGIBLE_STATUSES, true)) {
+            $rows[] = $memberRow;
+        } else {
+            $excludedUnavailable[] = ['name' => $memberRow['full_name'], 'status' => availabilityStatusMeta($status)['label']];
+        }
+    }
 
     if (empty($rows)) {
-        jsonResponse(true, 'This committee has no active members yet.', ['result' => null]);
+        jsonResponse(true, 'Every active member of this committee is currently marked unavailable.', [
+            'result' => null,
+            'excluded_unavailable' => $excludedUnavailable,
+        ]);
     }
 
     $members = [];
@@ -242,6 +262,7 @@ try {
 
     $aiResult['recommendation_id'] = $recommendationId;
     $aiResult['members'] = $members; // so the frontend can show the recommended member's name/role without a second lookup
+    $aiResult['excluded_unavailable'] = $excludedUnavailable;
 
     jsonResponse(true, '', ['result' => $aiResult]);
 

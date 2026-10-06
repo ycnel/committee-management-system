@@ -3,7 +3,7 @@
  * ------------------------------------------------------------------
  * Powers modules/workload/index.php: live AJAX search/filter/sort/
  * pagination, the Assign Task modal — including the "Generate with
- * AI" flow (Task Title -> Google Gemini -> auto-filled, fully editable
+ * AI" flow (Standard Task -> Google Gemini -> auto-filled, editable
  * Description/Assign To/Priority/Due Date) —
  * and assignment recommendations.
  * ------------------------------------------------------------------
@@ -22,8 +22,11 @@ function initWorkloadPage() {
 
   const AJAX_URL = window.APP_URL + '/modules/workload/ajax_search.php';
   const filterCommitteeSelect = filterForm.querySelector('[name="committee_id"]');
+  const taskStateInput = filterForm.querySelector('[name="task_state"]');
   const applyDot = document.getElementById('applyPendingDot');
+  const liveSearch = filterForm.dataset.liveSearch === 'true';
   let currentPage = 1;
+  let searchDebounceTimer = null;
 
   function buildParams(extra) {
     const data = new FormData(filterForm);
@@ -40,6 +43,23 @@ function initWorkloadPage() {
     });
   }
 
+    wrap.addEventListener('click', function (event) {
+      const button = event.target.closest('.workload-empty-assign');
+      if (button) openCreateModal(button.getAttribute('data-committee-id'));
+    });
+    document.querySelectorAll('.workload-state-filter').forEach(button => {
+      button.addEventListener('click', function () {
+        if (!taskStateInput) return;
+        taskStateInput.value = button.dataset.taskState;
+        document.querySelectorAll('.workload-state-filter').forEach(filterButton => {
+          const isActive = filterButton === button;
+          filterButton.classList.toggle('is-active', isActive);
+          filterButton.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        currentPage = 1;
+        loadTable();
+      });
+    });
   function bindRowEvents() {
     wrap.querySelectorAll('.pagination a.page-link').forEach(a => {
       a.addEventListener('click', function (e) {
@@ -68,10 +88,21 @@ function initWorkloadPage() {
      reload the task list on Apply / Enter; Reset clears and applies. */
   filterForm.addEventListener('submit', function (e) {
     e.preventDefault();
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     currentPage = 1;
     loadTable();
   });
-  filterForm.addEventListener('input', function () { if (applyDot) applyDot.classList.remove('d-none'); });
+  filterForm.addEventListener('input', function (e) {
+    if (liveSearch && e.target.name === 'search') {
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(function () {
+        currentPage = 1;
+        loadTable();
+      }, 250);
+      return;
+    }
+    if (applyDot) applyDot.classList.remove('d-none');
+  });
   filterForm.addEventListener('change', function () { if (applyDot) applyDot.classList.remove('d-none'); });
   const resetBtn = document.getElementById('filterReset');
   if (resetBtn) {
@@ -173,11 +204,17 @@ function initWorkloadPage() {
       : '<i class="bi bi-stars"></i> Generate with AI';
   }
 
-  function populateMemberOptions(members, selectedId) {
+  function populateMemberOptions(members, selectedId, recommendedId = null) {
     let opts = '<option value="">-- Select Member --</option>';
     members.forEach(m => {
-      const sel = String(m.member_id) === String(selectedId) ? 'selected' : '';
-      opts += `<option value="${m.member_id}" ${sel}>${m.name} (${m.role})</option>`;
+      const memberValue = m.member_id ?? m.committee_member_id;
+      const memberName = m.name ?? m.full_name;
+      const memberRole = m.role ?? m.member_role;
+      const isSelected = String(memberValue) === String(selectedId);
+      const isRecommended = recommendedId !== null && String(memberValue) === String(recommendedId);
+      const labelSuffix = isRecommended ? ' — Recommended' : '';
+      const sel = isSelected ? 'selected' : '';
+      opts += `<option value="${memberValue}" ${sel}>${memberName} (${memberRole})${labelSuffix}</option>`;
     });
     memberSelect.innerHTML = opts;
   }
@@ -238,15 +275,14 @@ function initWorkloadPage() {
       '</div>' +
       '<div class="mt-2"><strong>Relevant expertise:</strong> ' + escapeHtml(expertise) + '</div>' +
       '<div><strong>Relevant education/experience:</strong> ' + escapeHtml(experience) + '</div>' +
-      '<div><strong>Current workload:</strong> ' + escapeHtml(workload) + '</div>' +
-      '<div class="d-flex flex-wrap gap-2 mt-2 small">' +
-        '<span class="badge bg-light text-dark border">Expertise ' + (result.expertise_match ?? '—') + '/100</span>' +
-        '<span class="badge bg-light text-dark border">Experience ' + (result.experience_match ?? '—') + '/100</span>' +
-        '<span class="badge bg-light text-dark border">Workload ' + (result.workload_factor ?? '—') + '/100</span>' +
-        '<span class="badge bg-light text-dark border">Committee relevance ' + (result.committee_relevance ?? '—') + '/100</span>' +
-        '<span class="badge bg-primary">Overall relevance ' + (result.overall_relevance ?? '—') + '/100</span>' +
-      '</div>';
+      '<div><strong>Current workload:</strong> ' + escapeHtml(workload) + '</div>';
     aiReasoning.innerHTML = result.reasoning ? ('<i class="bi bi-info-circle"></i> ' + escapeHtml(result.reasoning)) : '';
+    if (result.excluded_unavailable && result.excluded_unavailable.length) {
+      const names = result.excluded_unavailable.map(function (item) {
+        return escapeHtml(item.name) + ' (' + escapeHtml(item.status) + ')';
+      }).join(', ');
+      aiReasoning.innerHTML += '<div class="text-muted small mt-1"><i class="bi bi-person-dash"></i> Not considered (unavailable): ' + names + '</div>';
+    }
 
     // ---- Populate the actual editable form fields ----
     if (member) {
@@ -278,7 +314,8 @@ function initWorkloadPage() {
         let opts = '<option value="">-- Select Member --</option>';
         data.members.forEach(m => {
           const sel = String(m.committee_member_id) === String(selectedMemberId) ? 'selected' : '';
-          opts += '<option value="' + m.committee_member_id + '" ' + sel + '>' + m.full_name + ' (' + m.member_role + ')</option>';
+          const availability = m.availability_status && m.availability_status !== 'Available' ? ' — ' + m.availability_label : '';
+          opts += '<option value="' + m.committee_member_id + '" ' + sel + '>' + m.full_name + ' (' + m.member_role + ')' + availability + '</option>';
         });
         memberSelect.innerHTML = opts || '<option value="">-- No active members --</option>';
         resolve();
@@ -293,7 +330,7 @@ function initWorkloadPage() {
     const taskTitle = titleInput.value.trim();
 
     if (!committeeId) { appToast('error', 'Please select a committee first.'); return; }
-    if (!taskTitle) { appToast('error', 'Please enter a task title first.'); titleInput.focus(); return; }
+    if (!taskTitle) { appToast('error', 'Please select a standard task first.'); return; }
 
     setGenerateButtonBusy(true);
     aiPanelWrap.style.display = 'none';
@@ -324,16 +361,24 @@ function initWorkloadPage() {
         const result = data.result;
         if (!result) {
           aiPanelWrap.style.display = 'block';
-          aiSummary.innerHTML = '<span class="text-muted">This committee has no active members yet.</span>';
+          aiSummary.innerHTML = '<span class="text-muted">' + escapeHtml(data.message || 'This committee has no active members yet.') + '</span>';
+          aiReasoning.innerHTML = '';
+          if (data.excluded_unavailable && data.excluded_unavailable.length) {
+            const names = data.excluded_unavailable.map(function (item) {
+              return escapeHtml(item.name) + ' (' + escapeHtml(item.status) + ')';
+            }).join(', ');
+            aiReasoning.innerHTML = '<div class="text-muted small"><i class="bi bi-person-dash"></i> ' + names + '</div>';
+          }
           return;
         }
 
         // Populate the member dropdown from the AI response's own member
         // list (already the real active members for this committee) so
-        // the select always has an option matching the recommendation.
-        if (result.members) populateMemberOptions(result.members, result.recommended_member_id);
+        // the select always has an option matching the recommendation,
+        // while still keeping the rest of the members available as overrides.
+        if (result.members) populateMemberOptions(result.members, result.recommended_member_id, result.recommended_member_id);
         renderAIResult(result);
-        goToStep(3);
+        goToStep(2);
       })
       .catch(() => {
         stopLoadingMessages();
@@ -359,27 +404,28 @@ function initWorkloadPage() {
   const addBtn = document.getElementById('btnAddTask');
   if (addBtn) {
     addBtn.addEventListener('click', function () {
-      form.reset();
-      document.getElementById('wl_id').value = 0;
-      memberSelect.innerHTML = '<option value="">-- Select Committee First --</option>';
-      aiPanelWrap.style.display = 'none';
-      aiLoading.style.display = 'none';
-      aiDescBadge.style.display = 'none';
-      aiRecIdInput.value = '';
-      goToStep(1);
-      document.getElementById('taskModalTitle').innerHTML = '<i class="bi bi-bar-chart-steps"></i> Assign Task';
-      modal.show();
+      openCreateModal(addBtn.getAttribute('data-committee-id') || '');
     });
   }
 
-  document.querySelectorAll('.workload-empty-assign').forEach(button => {
-    button.addEventListener('click', function () {
-      if (!addBtn) return;
-      addBtn.click();
-      committeeSelect.value = button.getAttribute('data-committee-id') || '';
+  function openCreateModal(committeeId) {
+    form.reset();
+    document.getElementById('wl_id').value = 0;
+    committeeSelect.value = '';
+    memberSelect.innerHTML = '<option value="">-- Select Committee First --</option>';
+    aiPanelWrap.style.display = 'none';
+    aiLoading.style.display = 'none';
+    aiDescBadge.style.display = 'none';
+    aiRecIdInput.value = '';
+    goToStep(1);
+    document.getElementById('taskModalTitle').innerHTML = '<i class="bi bi-bar-chart-steps"></i> Propose Task';
+    saveStepButton.innerHTML = '<i class="bi bi-send"></i> Submit for Review';
+    if (committeeId) {
+      committeeSelect.value = committeeId;
       committeeSelect.dispatchEvent(new Event('change'));
-    });
-  });
+    }
+    modal.show();
+  }
 
   function openEditModal(id) {
     appGet(window.APP_URL + '/modules/workload/ajax_get.php?id=' + id).then(data => {
@@ -399,6 +445,7 @@ function initWorkloadPage() {
       aiRecIdInput.value = '';
       goToStep(1);
       document.getElementById('taskModalTitle').innerHTML = '<i class="bi bi-pencil-square"></i> Edit Task';
+      saveStepButton.innerHTML = '<i class="bi bi-check-circle"></i> Save Task';
       modal.show();
     });
   }

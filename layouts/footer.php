@@ -101,19 +101,5 @@ endif;
 <script src="<?= e($js) ?>"></script>
 <?php endforeach; ?>
 
-<style>
-    /* Keeps the sidebar layout filling the viewport height now that
-       there's no footer bar pinning things at the bottom. */
-    .app-wrapper {
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-    }
-
-    .main-content {
-        flex: 1;
-    }
-</style>
-
 </body>
 </html>

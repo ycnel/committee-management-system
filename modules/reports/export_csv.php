@@ -9,7 +9,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/report_queries.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]); // read/oversight only; canManage() still gates writes
 
 [$dateFrom, $dateTo] = reportDateRange();
 $rows = committeeBreakdown(db(), $dateFrom, $dateTo);

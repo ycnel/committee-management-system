@@ -8,9 +8,92 @@
  */
 
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/report_drafts.php';
 require_once __DIR__ . '/report_data.php';
 require_once __DIR__ . '/report_narrative.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]); // read/oversight only; canManage() still gates writes
+
+if ((int)($_GET['draft_id'] ?? 0) > 0) {
+  $draftId = (int)$_GET['draft_id'];
+  $draft = getReportDraft(db(), $draftId);
+  if (!$draft) {
+    http_response_code(404);
+    exit('Committee report not found.');
+  }
+  $draftSections = [
+    'matter_referred' => 'I. MATTER REFERRED',
+    'committee_proceedings' => 'II. COMMITTEE PROCEEDINGS',
+    'findings' => 'III. FINDINGS',
+    'discussion_analysis' => 'IV. DISCUSSION / ANALYSIS',
+    'conclusion' => 'V. CONCLUSION',
+    'recommendations' => 'VI. RECOMMENDATION',
+    'legislative_history' => 'VII. LEGISLATIVE HISTORY',
+    'committee_amendments' => 'VIII. COMMITTEE AMENDMENTS',
+    'individual_views' => 'IX. INDIVIDUAL / MINORITY / SUPPLEMENTAL VIEWS',
+    'committee_action' => 'COMMITTEE ACTION',
+    'signature_details' => 'SIGNATURES AND CONCURRENCE',
+    'appendices' => 'APPENDICES',
+  ];
+  $isFinal = $draft['status'] === 'Final';
+  ?>
+  <!DOCTYPE html>
+  <html lang="en"><head><meta charset="UTF-8"><title><?= e($draft['report_number']) ?> - Committee Report</title>
+  <link href="<?= e(vendorAsset('bootstrap/bootstrap.min.css', 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css')) ?>" rel="stylesheet">
+  <style>
+    body{font-family:Georgia,"Times New Roman",serif;color:#171717;padding:28px;font-size:12pt}
+    .report-document{max-width:850px;margin:0 auto;position:relative}
+    .draft-watermark{position:fixed;inset:40% 0 auto;text-align:center;transform:rotate(-25deg);font:700 76px Arial,sans-serif;color:rgba(180,30,30,.10);pointer-events:none}
+    .official-header{text-align:center;border-bottom:2px solid #222;padding-bottom:16px;margin-bottom:20px}
+    .official-header img{width:74px;height:74px;object-fit:contain;margin-bottom:8px}
+    .official-header strong,.official-header div{display:block;letter-spacing:.04em}
+    .official-header h2{font-size:17pt;margin:14px 0 5px;font-weight:700}
+    .official-header h3{font-size:15pt;margin:4px 0;font-weight:700}
+    .meta{border-bottom:1px solid #999;padding:10px 0;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:7px 16px}
+    .section{margin:18px 0;break-inside:avoid}
+    .section h4{font:700 11pt Arial,sans-serif;text-transform:uppercase;margin-bottom:7px}
+    .section p{white-space:pre-wrap;line-height:1.55;margin:0}
+    .recommendation{font-weight:700;border:1px solid #555;padding:10px}
+    .draft-note{font:12px Arial,sans-serif;text-align:center;color:#9b1c1c;margin-bottom:14px}
+    @media print{body{padding:0}.no-print{display:none!important}.report-document{max-width:none}.draft-watermark{position:fixed}}
+  </style></head><body>
+  <div class="no-print text-end mb-3"></div>
+  <?php if (!$isFinal): ?><div class="draft-watermark"><?= e(strtoupper($draft['status'])) ?></div><div class="draft-note">DRAFT — NOT AN OFFICIAL OR APPROVED COMMITTEE REPORT</div><?php endif; ?>
+  <main class="report-document">
+    <header class="official-header">
+      <img src="<?= e(APP_URL) ?>/assets/img/Ph_seal_ncr_manila.svg" alt="Manila City Seal">
+      <strong>REPUBLIC OF THE PHILIPPINES</strong><strong>CITY OF MANILA</strong><strong>SANGGUNIANG PANLUNGSOD</strong>
+      <h3>COMMITTEE ON <?= e(strtoupper($draft['committee_name'] ?? '')) ?></h3>
+      <h2>COMMITTEE REPORT NO. <?= e($draft['report_number'] ?? '') ?></h2>
+    </header>
+    <div class="meta">
+      <?php foreach ([
+          'Date Referred' => $draft['date_referred'] ?: '',
+          'Referred By' => $draft['referred_by'] ?: '',
+          'Reference / Measure No.' => $draft['reference_measure_no'] ?: '',
+          'CMAS Internal Reference' => $draft['internal_reference_no'] ?: '',
+          'Committee Action Date' => $draft['committee_action_date'] ?: '',
+          'Subject / Title' => $draft['subject_title'] ?: $draft['report_title'],
+          'Proposed Ordinance / Legislative Measure' => $draft['proposed_ordinance_title'] ?: '',
+          'Jurisdiction' => $draft['jurisdiction_name'] ?: '',
+          'Prepared By' => $draft['created_by_name'] ?: '',
+      ] as $label => $value): ?>
+        <?php if ($value !== ''): ?><div><strong><?= e($label) ?>:</strong> <?= e((string)$value) ?></div><?php endif; ?>
+      <?php endforeach; ?>
+    </div>
+    <?php foreach ($draftSections as $key => $heading): ?>
+      <?php $text = trim((string)($draft[$key] ?? '')); ?>
+      <section class="section <?= $key === 'recommendations' ? 'recommendation' : '' ?>">
+        <h4><?= e($heading) ?><?= $key === 'recommendations' && $draft['recommendation_type'] ? ' — ' . e($draft['recommendation_type']) : '' ?></h4>
+        <p><?= $text !== '' ? e($text) : '<span class="text-muted">Not provided in the report draft.</span>' ?></p>
+      </section>
+    <?php endforeach; ?>
+    <?php if ($draft['ai_generated']): ?><p class="small text-muted mt-4">AI-assisted content is a draft and requires human verification and approval.</p><?php endif; ?>
+    <footer class="border-top pt-2 mt-4 small text-muted">Generated by CMAS on <?= e(date('F j, Y g:i A')) ?> · Status: <?= e($draft['status']) ?></footer>
+  </main>
+  </body></html>
+  <?php
+  exit;
+}
 
 $pdo = db();
 $type = in_array($_GET['type'] ?? '', ['committee', 'workload', 'performance'], true) ? $_GET['type'] : 'committee';

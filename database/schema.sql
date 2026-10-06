@@ -164,6 +164,73 @@ CREATE TABLE IF NOT EXISTS jurisdictions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------
+-- STANDARD LEGISLATIVE TASK TEMPLATES
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_templates (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    task_name       VARCHAR(255) NOT NULL,
+    description     TEXT DEFAULT NULL,
+    proof_requirement TEXT DEFAULT NULL,
+    task_type       ENUM('Core','Jurisdiction') NOT NULL DEFAULT 'Core',
+    sequence_order  INT NOT NULL DEFAULT 0,
+    is_required     TINYINT(1) NOT NULL DEFAULT 0,
+    is_active       TINYINT(1) NOT NULL DEFAULT 1,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_task_template_jurisdiction_name (jurisdiction_id, task_name),
+    KEY idx_task_templates_active_order (is_active, sequence_order),
+    CONSTRAINT fk_task_template_jurisdiction FOREIGN KEY (jurisdiction_id)
+        REFERENCES jurisdictions(jurisdiction_id) ON UPDATE CASCADE ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_template_requests (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    requested_by    INT DEFAULT NULL,
+    jurisdiction_id INT DEFAULT NULL,
+    task_name       VARCHAR(255) NOT NULL,
+    description     TEXT DEFAULT NULL,
+    sequence_order  INT NOT NULL DEFAULT 0,
+    is_required     TINYINT(1) NOT NULL DEFAULT 0,
+    status          ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
+    reviewed_by     INT DEFAULT NULL,
+    reviewed_at     DATETIME DEFAULT NULL,
+    admin_response  VARCHAR(1000) DEFAULT NULL,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_task_template_requests_status (status, created_at),
+    KEY idx_task_template_requests_requester (requested_by, created_at),
+    CONSTRAINT fk_task_template_request_user FOREIGN KEY (requested_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_task_template_request_jurisdiction FOREIGN KEY (jurisdiction_id)
+        REFERENCES jurisdictions(jurisdiction_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_task_template_request_reviewer FOREIGN KEY (reviewed_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
+-- JURISDICTION REMOVAL REQUESTS
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS jurisdiction_removal_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    jurisdiction_id INT DEFAULT NULL,
+    jurisdiction_name VARCHAR(150) NOT NULL,
+    requested_by INT DEFAULT NULL,
+    reason TEXT DEFAULT NULL,
+    status ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+    requested_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processed_by INT DEFAULT NULL,
+    processed_at DATETIME DEFAULT NULL,
+    admin_response TEXT DEFAULT NULL,
+    KEY idx_jurisdiction_removal_status (status, requested_at),
+    KEY idx_jurisdiction_removal_requester (requested_by, requested_at),
+    CONSTRAINT fk_jurisdiction_removal_jurisdiction FOREIGN KEY (jurisdiction_id)
+        REFERENCES jurisdictions(jurisdiction_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_jurisdiction_removal_requester FOREIGN KEY (requested_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_jurisdiction_removal_processor FOREIGN KEY (processed_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
 -- COMMITTEES  (Module 1: Committee Formation)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS committees (
@@ -192,6 +259,7 @@ CREATE TABLE IF NOT EXISTS committee_members (
     committee_id         INT NOT NULL,
     user_id             INT NOT NULL,
     member_role         ENUM('Chairperson','Vice Chairperson','Member') NOT NULL DEFAULT 'Member',
+    political_group     ENUM('Majority','Minority') NULL DEFAULT NULL,
     assigned_date       DATE DEFAULT NULL,
     status               ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
     created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -204,11 +272,33 @@ CREATE TABLE IF NOT EXISTS committee_members (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------
+-- MEMBER AVAILABILITY  (Phase 3: Availability / Pause Mode)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS member_availability (
+    availability_id      INT AUTO_INCREMENT PRIMARY KEY,
+    committee_member_id  INT NOT NULL,
+    status                ENUM('Available','Unavailable','Idle','Emergency') NOT NULL DEFAULT 'Available',
+    reason                VARCHAR(500) DEFAULT NULL,
+    start_date            DATE DEFAULT NULL,
+    end_date              DATE DEFAULT NULL,
+    updated_by            INT DEFAULT NULL,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    KEY idx_availability_member (committee_member_id, availability_id),
+    CONSTRAINT fk_availability_member FOREIGN KEY (committee_member_id)
+        REFERENCES committee_members(committee_member_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_availability_updated_by FOREIGN KEY (updated_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
 -- WORKLOAD ASSIGNMENTS  (Module 4: Smart Workload Distribution)
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS workload_assignments (
     workload_id           INT AUTO_INCREMENT PRIMARY KEY,
     committee_member_id   INT NOT NULL,
+    task_template_id      INT DEFAULT NULL,
+    jurisdiction_id       INT DEFAULT NULL,
     task_title             VARCHAR(255) NOT NULL,
     task_description       TEXT,
     priority               ENUM('Low','Medium','High','Urgent') NOT NULL DEFAULT 'Medium',
@@ -220,9 +310,92 @@ CREATE TABLE IF NOT EXISTS workload_assignments (
     created_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE KEY uq_workload_member_task_due (committee_member_id, task_title, due_date),
+    KEY idx_workload_template (task_template_id),
+    KEY idx_workload_jurisdiction (jurisdiction_id),
 
     CONSTRAINT fk_wl_member FOREIGN KEY (committee_member_id)
-        REFERENCES committee_members(committee_member_id) ON UPDATE CASCADE ON DELETE CASCADE
+        REFERENCES committee_members(committee_member_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_wl_task_template FOREIGN KEY (task_template_id)
+        REFERENCES task_templates(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_wl_jurisdiction FOREIGN KEY (jurisdiction_id)
+        REFERENCES jurisdictions(jurisdiction_id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
+-- TASK COMPLETION APPROVAL AND TASK REMOVAL REQUESTS
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS task_completion_requests (
+    id                    INT AUTO_INCREMENT PRIMARY KEY,
+    workload_id           INT DEFAULT NULL,
+    submitted_by          INT DEFAULT NULL,
+    task_title_snapshot   VARCHAR(255) NOT NULL,
+    committee_id          INT DEFAULT NULL,
+    committee_snapshot    VARCHAR(150) NOT NULL,
+    jurisdiction_snapshot VARCHAR(150) DEFAULT NULL,
+    completion_notes      TEXT NOT NULL,
+    status                ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
+    reviewed_by           INT DEFAULT NULL,
+    reviewed_at           DATETIME DEFAULT NULL,
+    reviewer_remarks      TEXT DEFAULT NULL,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_completion_task_status (workload_id, status),
+    KEY idx_completion_submitter (submitted_by, created_at),
+    KEY idx_completion_status_created (status, created_at),
+    CONSTRAINT fk_completion_workload FOREIGN KEY (workload_id)
+        REFERENCES workload_assignments(workload_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_completion_submitter FOREIGN KEY (submitted_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_completion_committee FOREIGN KEY (committee_id)
+        REFERENCES committees(committee_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_completion_reviewer FOREIGN KEY (reviewed_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_completion_request_files (
+    id                INT AUTO_INCREMENT PRIMARY KEY,
+    request_id        INT NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename   VARCHAR(100) NOT NULL,
+    file_path         VARCHAR(255) NOT NULL,
+    mime_type         VARCHAR(127) NOT NULL,
+    file_size         BIGINT UNSIGNED NOT NULL,
+    uploaded_by       INT DEFAULT NULL,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_completion_stored_filename (stored_filename),
+    KEY idx_completion_file_request (request_id),
+    CONSTRAINT fk_completion_file_request FOREIGN KEY (request_id)
+        REFERENCES task_completion_requests(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_completion_file_uploader FOREIGN KEY (uploaded_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS task_removal_requests (
+    id                    INT AUTO_INCREMENT PRIMARY KEY,
+    workload_id           INT DEFAULT NULL,
+    submitted_by          INT DEFAULT NULL,
+    task_title_snapshot   VARCHAR(255) NOT NULL,
+    committee_id          INT DEFAULT NULL,
+    committee_snapshot    VARCHAR(150) NOT NULL,
+    jurisdiction_snapshot VARCHAR(150) DEFAULT NULL,
+    reason                TEXT NOT NULL,
+    status                ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
+    reviewed_by           INT DEFAULT NULL,
+    reviewed_at           DATETIME DEFAULT NULL,
+    reviewer_remarks      TEXT DEFAULT NULL,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_removal_task_status (workload_id, status),
+    KEY idx_removal_submitter (submitted_by, created_at),
+    KEY idx_removal_committee_status (committee_id, status, created_at),
+    CONSTRAINT fk_removal_workload FOREIGN KEY (workload_id)
+        REFERENCES workload_assignments(workload_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_removal_submitter FOREIGN KEY (submitted_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_removal_committee FOREIGN KEY (committee_id)
+        REFERENCES committees(committee_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_removal_reviewer FOREIGN KEY (reviewed_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------
@@ -262,6 +435,99 @@ CREATE TABLE IF NOT EXISTS committee_reports (
         REFERENCES committees(committee_id) ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_report_user FOREIGN KEY (generated_by)
         REFERENCES users(id) ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ---------------------------------------------------------
+-- COMMITTEE REPORT DRAFTS  (Phase 6: human-reviewed draft workflow)
+-- ---------------------------------------------------------
+CREATE TABLE IF NOT EXISTS committee_report_drafts (
+    draft_id INT AUTO_INCREMENT PRIMARY KEY,
+    committee_id INT DEFAULT NULL,
+    jurisdiction_id INT DEFAULT NULL,
+    report_type ENUM('Committee','Workload','Performance','Monthly','Annual') NOT NULL DEFAULT 'Committee',
+    report_title VARCHAR(255) NOT NULL,
+    status ENUM('Draft','AI-Assisted Draft','For Review','Under Review','Returned for Revision','Approved','Final','Archived') NOT NULL DEFAULT 'Draft',
+    ai_generated TINYINT(1) NOT NULL DEFAULT 0,
+    executive_summary TEXT DEFAULT NULL,
+    analysis TEXT DEFAULT NULL,
+    observations TEXT DEFAULT NULL,
+    recommendations TEXT DEFAULT NULL,
+    conclusion TEXT DEFAULT NULL,
+    legislative_matter_ref VARCHAR(255) DEFAULT NULL,
+    meeting_ref VARCHAR(255) DEFAULT NULL,
+    hearing_ref VARCHAR(255) DEFAULT NULL,
+    research_ref VARCHAR(255) DEFAULT NULL,
+    document_references TEXT DEFAULT NULL,
+    linked_workload_id INT DEFAULT NULL,
+    created_by INT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_by INT DEFAULT NULL,
+    reviewed_at DATETIME DEFAULT NULL,
+    finalized_by INT DEFAULT NULL,
+    finalized_at DATETIME DEFAULT NULL,
+    report_id INT DEFAULT NULL,
+    report_number VARCHAR(40) DEFAULT NULL,
+    internal_reference_no VARCHAR(40) DEFAULT NULL,
+    proposed_ordinance_title VARCHAR(500) DEFAULT NULL,
+    reference_measure_no VARCHAR(150) DEFAULT NULL,
+    date_referred DATE DEFAULT NULL,
+    referred_by VARCHAR(255) DEFAULT NULL,
+    subject_title VARCHAR(500) DEFAULT NULL,
+    matter_referred TEXT DEFAULT NULL,
+    committee_proceedings MEDIUMTEXT DEFAULT NULL,
+    findings MEDIUMTEXT DEFAULT NULL,
+    discussion_analysis MEDIUMTEXT DEFAULT NULL,
+    recommendation_type VARCHAR(100) DEFAULT NULL,
+    legislative_history MEDIUMTEXT DEFAULT NULL,
+    committee_amendments MEDIUMTEXT DEFAULT NULL,
+    individual_views MEDIUMTEXT DEFAULT NULL,
+    committee_action TEXT DEFAULT NULL,
+    committee_action_date DATE DEFAULT NULL,
+    signature_details MEDIUMTEXT DEFAULT NULL,
+    appendices MEDIUMTEXT DEFAULT NULL,
+    ai_sources MEDIUMTEXT DEFAULT NULL,
+    returned_reason TEXT DEFAULT NULL,
+    approved_by INT DEFAULT NULL,
+    approved_at DATETIME DEFAULT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_draft_committee (committee_id, status),
+    KEY idx_draft_jurisdiction (jurisdiction_id),
+    UNIQUE KEY uq_committee_report_draft_number (report_number),
+    UNIQUE KEY uq_committee_report_internal_reference (internal_reference_no),
+    KEY idx_report_draft_status_updated (status, updated_at),
+    CONSTRAINT fk_draft_committee FOREIGN KEY (committee_id)
+        REFERENCES committees(committee_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_jurisdiction FOREIGN KEY (jurisdiction_id)
+        REFERENCES jurisdictions(jurisdiction_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_workload FOREIGN KEY (linked_workload_id)
+        REFERENCES workload_assignments(workload_id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_created_by FOREIGN KEY (created_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_reviewed_by FOREIGN KEY (reviewed_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_finalized_by FOREIGN KEY (finalized_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_approved_by FOREIGN KEY (approved_by)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_draft_report FOREIGN KEY (report_id)
+        REFERENCES committee_reports(report_id) ON UPDATE CASCADE ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS committee_report_draft_history (
+    history_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    draft_id INT NOT NULL,
+    action VARCHAR(40) NOT NULL,
+    user_id INT DEFAULT NULL,
+    user_role VARCHAR(100) DEFAULT NULL,
+    previous_status VARCHAR(40) DEFAULT NULL,
+    new_status VARCHAR(40) DEFAULT NULL,
+    comments TEXT DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_report_history_draft (draft_id, created_at),
+    CONSTRAINT fk_report_history_draft FOREIGN KEY (draft_id)
+        REFERENCES committee_report_drafts(draft_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_report_history_user FOREIGN KEY (user_id)
+        REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ---------------------------------------------------------

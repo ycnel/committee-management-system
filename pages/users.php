@@ -9,7 +9,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 
 $pageTitle  = 'User Management';
 $activeMenu = 'users';
@@ -17,12 +17,22 @@ $pdo = db();
 
 $roles = $pdo->query('SELECT id, name FROM roles ORDER BY id')->fetchAll();
 
+// Administrator-account guard (defense in depth — pages/ajax_user_save.php
+// and ajax_user_delete.php enforce this server-side regardless of what the
+// browser sends). A plain Administrator cannot assign the Administrator or
+// Super Admin role to anyone, so those options are hidden from the
+// create/edit form entirely. The "All Roles" filter above the table still
+// lists every role — filtering is read-only and doesn't grant anything.
+$assignableRoles = canManageAdminAccounts()
+    ? $roles
+    : array_values(array_filter($roles, static fn(array $r): bool => !in_array($r['name'], [ROLE_ADMIN, ROLE_SUPER_ADMIN], true)));
+
 include __DIR__ . '/../layouts/header.php';
 ?>
 <div class="app-wrapper">
   <?php include __DIR__ . '/../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content admin-polished-page user-management-page">
   <?php include __DIR__ . '/../layouts/content-topbar.php'; ?>
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
@@ -94,10 +104,13 @@ include __DIR__ . '/../layouts/header.php';
             <div class="col-md-6">
               <label class="form-label">Role <span class="text-danger">*</span></label>
               <select name="role_id" id="us_role" class="form-select" required>
-                <?php foreach ($roles as $r): ?>
+                <?php foreach ($assignableRoles as $r): ?>
                   <option value="<?= (int)$r['id'] ?>"><?= e($r['name']) ?></option>
                 <?php endforeach; ?>
               </select>
+              <?php if (!canManageAdminAccounts()): ?>
+                <div class="form-text">Only a Super Admin can create or edit Administrator/Super Admin accounts.</div>
+              <?php endif; ?>
             </div>
             <div class="col-md-6">
               <label class="form-label">Status</label>

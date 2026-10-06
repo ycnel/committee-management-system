@@ -1,24 +1,14 @@
-# Environment variables and secrets
 .env
 .env.*
 !.env.example
 
-# XAMPP / local configuration
-xampp/
+vendor/
+logs/
 *.log
 
-# IDE
-.vscode/
-.idea/
-
-# Operating system
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# PHP dependencies
-/vendor/
+.idea/
+.vscode/
 
-# Temporary files
-*.tmp
-*.temp

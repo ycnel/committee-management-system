@@ -9,7 +9,8 @@
  */
 
 require_once __DIR__ . '/../../includes/auth.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]);
+require_once __DIR__ . '/../../includes/report_drafts.php';
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]);
 
 $id = (int)($_GET['id'] ?? 0);
 $pdo = db();
@@ -48,6 +49,25 @@ $memberCountStmt = $pdo->prepare('SELECT COUNT(*) FROM committee_members WHERE c
 $memberCountStmt->execute([':id' => $id]);
 $memberCount = (int)$memberCountStmt->fetchColumn();
 
+$canViewReports = in_array(currentRole(), [ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES], true);
+$recentReports = [];
+$recentDrafts = [];
+if ($canViewReports) {
+    $reportsStmt = $pdo->prepare(
+        'SELECT report_id, report_title, report_type, generated_at
+         FROM committee_reports WHERE committee_id = :id ORDER BY generated_at DESC LIMIT 5'
+    );
+    $reportsStmt->execute([':id' => $id]);
+    $recentReports = $reportsStmt->fetchAll();
+
+    $draftsStmt = $pdo->prepare(
+        'SELECT draft_id, report_title, report_type, status, ai_generated, created_at
+         FROM committee_report_drafts WHERE committee_id = :id ORDER BY draft_id DESC LIMIT 5'
+    );
+    $draftsStmt->execute([':id' => $id]);
+    $recentDrafts = $draftsStmt->fetchAll();
+}
+
 $pageTitle  = $committee['committee_name'];
 $activeMenu = 'committees';
 $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' => 'danger'];
@@ -57,7 +77,7 @@ include __DIR__ . '/../../layouts/header.php';
 <div class="app-wrapper">
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content committee-management-page admin-polished-page">
   <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
@@ -119,6 +139,54 @@ include __DIR__ . '/../../layouts/header.php';
     </div>
   </div>
 
+  <?php if ($canViewReports): ?>
+    <section class="card mt-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-journal-richtext"></i> Committee Reports &amp; Drafts</span>
+        <div class="d-flex gap-3">
+          <a href="<?= e(APP_URL) ?>/modules/committee_reports/index.php?committee_id=<?= (int)$id ?>" class="small">Reports</a>
+          <a href="<?= e(APP_URL) ?>/modules/committee_reports/drafts.php" class="small">All drafts</a>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-lg-6">
+            <h6 class="small fw-semibold">Recent reports</h6>
+            <?php if (!$recentReports): ?>
+              <p class="text-muted small mb-0">No reports generated for this committee yet.</p>
+            <?php else: ?>
+              <ul class="list-group list-group-flush">
+                <?php foreach ($recentReports as $report): ?>
+                  <li class="list-group-item px-0 d-flex justify-content-between gap-2">
+                    <span><?= e($report['report_title']) ?> <span class="text-muted small"><?= e($report['report_type']) ?></span></span>
+                    <span class="text-muted small text-nowrap"><?= e(timeAgo($report['generated_at'])) ?></span>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+          </div>
+          <div class="col-lg-6">
+            <h6 class="small fw-semibold">Report drafts</h6>
+            <?php if (!$recentDrafts): ?>
+              <p class="text-muted small mb-0">No report drafts for this committee yet.</p>
+            <?php else: ?>
+              <ul class="list-group list-group-flush">
+                <?php foreach ($recentDrafts as $draft): ?>
+                  <li class="list-group-item px-0 d-flex justify-content-between gap-2">
+                    <a href="<?= e(APP_URL) ?>/modules/committee_reports/draft_edit.php?id=<?= (int)$draft['draft_id'] ?>">
+                      <?= e($draft['report_title']) ?>
+                    </a>
+                    <span class="badge bg-<?= e(reportDraftStatusColor($draft['status'])) ?>"><?= e($draft['status']) ?></span>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
+          </div>
+        </div>
+      </div>
+    </section>
+  <?php endif; ?>
+
 <?php if (canManage()): ?>
 <div class="modal fade" id="assignMemberModal" tabindex="-1">
   <div class="modal-dialog">
@@ -151,6 +219,14 @@ include __DIR__ . '/../../layouts/header.php';
               <option value="Chairperson">Chairperson</option>
             </select>
           </div>
+          <div class="mb-3">
+            <label class="form-label">Political Group</label>
+            <select name="political_group" id="am_political_group" class="form-select">
+              <option value="">Unassigned</option>
+              <option value="Majority">Majority</option>
+              <option value="Minority">Minority</option>
+            </select>
+          </div>
           <div class="mb-1">
             <label class="form-label">Assigned Date</label>
             <input type="date" name="assigned_date" id="am_date" class="form-control" value="<?= date('Y-m-d') ?>">
@@ -167,6 +243,6 @@ include __DIR__ . '/../../layouts/header.php';
 <?php endif; ?>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/committee-view.js'];
+$extraJs = [APP_URL . '/assets/js/committee-view.js', APP_URL . '/assets/js/availability.js'];
 include __DIR__ . '/../../layouts/footer.php';
 ?>

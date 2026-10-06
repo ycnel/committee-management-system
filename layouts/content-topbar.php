@@ -14,6 +14,7 @@
  */
 ?>
 <link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/auth-loading.css">
+<link rel="stylesheet" href="<?= e(APP_URL) ?>/assets/css/messages.css">
 
 <nav class="topnav" aria-label="Top navigation">
   <button type="button" class="mobile-sidebar-toggle" id="mobileSidebarToggle" aria-label="Toggle sidebar menu" aria-expanded="false">
@@ -25,7 +26,12 @@
   <div class="topbar-spacer"></div>
 
   <div class="topbar-actions">
-    <div class="dropdown">
+    <button type="button" class="topbar-icon-btn position-relative" id="messagePanelToggle" aria-expanded="false" aria-haspopup="true" aria-controls="messagePanel" aria-label="Messages">
+      <i class="bi bi-chat-dots"></i>
+      <span data-message-badge class="message-unread-badge position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none"></span>
+    </button>
+
+    <div class="dropdown notification-dropdown">
       <button type="button" class="topbar-icon-btn position-relative" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications">
         <i class="bi bi-bell"></i>
         <?php if ($notifCount > 0): ?>
@@ -36,17 +42,40 @@
           <span data-notification-badge class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none"></span>
         <?php endif; ?>
       </button>
-      <div class="dropdown-menu dropdown-menu-end p-2" data-notification-read-url="<?= e(APP_URL) ?>/pages/ajax_notification_read.php" style="min-width:320px;max-height:380px;overflow-y:auto;">
-        <div class="d-flex align-items-center justify-content-between px-2">
-          <h6 class="dropdown-header px-0 mb-0">Notifications</h6>
-          <?php if ($notifCount > 0): ?><button type="button" class="btn btn-link btn-sm p-0" data-mark-all-notifications>Mark all as read</button><?php endif; ?>
+      <div class="dropdown-menu dropdown-menu-end notification-menu" data-notification-read-url="<?= e(APP_URL) ?>/pages/ajax_notification_read.php">
+        <div class="notification-menu-header">
+          <div>
+            <h6 class="mb-0">Notifications</h6>
+            <span class="notification-menu-count"><?= $notifCount ?> unread</span>
+          </div>
+          <?php if ($notifCount > 0): ?>
+            <button type="button" class="btn btn-link btn-sm p-0" data-mark-all-notifications>Mark all as read</button>
+          <?php endif; ?>
         </div>
         <?php if (empty($notifItems)): ?>
-          <span class="dropdown-item-text small text-muted">You're all caught up — nothing new right now.</span>
+          <div class="notification-empty">
+            <i class="bi bi-bell-slash" aria-hidden="true"></i>
+            <span>You're all caught up — nothing new right now.</span>
+          </div>
+        <?php else: ?>
+          <div class="notification-list">
+            <?php foreach ($notifItems as $item): ?>
+              <a class="notification-item<?= $item['read_at'] === null ? ' is-unread' : '' ?>"
+                 data-notification-id="<?= (int)$item['notification_id'] ?>"
+                 href="<?= e($item['url'] ?: '#') ?>"
+                 title="<?= e($item['message']) ?>">
+                <span class="notification-item-icon" aria-hidden="true"><i class="bi bi-bell"></i></span>
+                <span class="notification-item-content">
+                  <span class="notification-item-message"><?= e($item['message']) ?></span>
+                  <time class="notification-item-time" datetime="<?= e(date(DATE_ATOM, strtotime($item['created_at']))) ?>">
+                    <?= e(date('M j, Y · g:i A', strtotime($item['created_at']))) ?>
+                  </time>
+                </span>
+                <?php if ($item['read_at'] === null): ?><span class="notification-unread-dot" aria-label="Unread"></span><?php endif; ?>
+              </a>
+            <?php endforeach; ?>
+          </div>
         <?php endif; ?>
-        <?php foreach ($notifItems as $item): ?>
-          <a class="dropdown-item small<?= $item['read_at'] === null ? ' fw-semibold bg-light' : '' ?>" data-notification-id="<?= (int)$item['notification_id'] ?>" href="<?= e($item['url'] ?: '#') ?>"><?= e($item['message']) ?></a>
-        <?php endforeach; ?>
       </div>
     </div>
 
@@ -66,7 +95,23 @@
   </div>
 </nav>
 
-<div class="auth-loading" id="authLoading" role="status" aria-live="polite" aria-hidden="true">
+<!-- Floating "Messages" panel (committee group chat) — Facebook Messenger style.
+     Lives outside <nav> so it floats over the page instead of scrolling with
+     the topbar; assets/js/messages.js drives everything inside it. -->
+<div class="message-panel" id="messagePanel" role="dialog" aria-label="Messages" aria-hidden="true">
+  <div class="message-panel-header">
+    <button type="button" class="message-panel-icon-btn d-none" id="messagePanelBack" aria-label="Back to conversations">
+      <i class="bi bi-arrow-left"></i>
+    </button>
+    <span class="message-panel-header-title" id="messagePanelTitle">Messages</span>
+    <button type="button" class="message-panel-icon-btn" id="messagePanelClose" aria-label="Close messages">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <div class="message-panel-body" id="messagePanelBody"></div>
+</div>
+
+<div class="auth-loading" id="authLoading" role="statcodeus" aria-live="polite" aria-hidden="true">
   <div class="auth-loading-content">
     <img src="<?= e(APP_URL) ?>/assets/img/Ph_seal_ncr_manila.svg" alt="Manila seal" class="auth-loading-seal">
     <div class="leap-frog" aria-label="Loading">
@@ -154,7 +199,13 @@ document.addEventListener('DOMContentLoaded', function () {
       .then(function (response) { return response.json(); })
       .then(function (data) {
         if (!data.success) return;
-        if (item) item.classList.remove('fw-semibold', 'bg-light');
+        if (item) {
+          item.classList.remove('is-unread');
+          const unreadDot = item.querySelector('.notification-unread-dot');
+          if (unreadDot) unreadDot.remove();
+        }
+        const unreadCountLabel = notificationMenu.querySelector('.notification-menu-count');
+        if (unreadCountLabel) unreadCountLabel.textContent = Number(data.unread_count || 0) + ' unread';
         updateNotificationBadge(Number(data.unread_count || 0));
       });
   }
@@ -188,9 +239,13 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(function (data) {
           if (!data.success) return;
           notificationMenu.querySelectorAll('[data-notification-id]').forEach(function (item) {
-            item.classList.remove('fw-semibold', 'bg-light');
+            item.classList.remove('is-unread');
+            const unreadDot = item.querySelector('.notification-unread-dot');
+            if (unreadDot) unreadDot.remove();
           });
           markAllButton.remove();
+          const unreadCountLabel = notificationMenu.querySelector('.notification-menu-count');
+          if (unreadCountLabel) unreadCountLabel.textContent = '0 unread';
           updateNotificationBadge(Number(data.unread_count || 0));
         })
         .catch(function () {});
@@ -199,3 +254,10 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <script src="<?= e(APP_URL) ?>/assets/js/auth-loading.js"></script>
+<!-- Messages panel logic (assets/js/messages.js) calls window.APP_URL /
+     window.APP_CSRF_TOKEN and the appGet()/appPost() helpers, all defined
+     by assets/js/app.js in layouts/footer.php further down the page. That's
+     fine: messages.js only reads them inside its DOMContentLoaded handler,
+     which runs after every script tag on the page (including footer.php's)
+     has already executed, regardless of tag order in the HTML. -->
+<script src="<?= e(APP_URL) ?>/assets/js/messages.js"></script>

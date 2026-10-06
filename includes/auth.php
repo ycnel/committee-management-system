@@ -22,6 +22,10 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/activity_log.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/messages.php';
+require_once __DIR__ . '/db_backup.php';
+require_once __DIR__ . '/workload_proposals.php';
+require_once __DIR__ . '/availability.php';
 
 /**
  * FIX (network-error root cause #4): guarantee that even a totally
@@ -240,6 +244,54 @@ function isAdmin(): bool
 }
 
 /**
+ * True only for the Super Admin role — SYSTEM AUTHORITY's technical tier
+ * (backup/restore, security settings, AI configuration, administrator
+ * accounts). Deliberately separate from isAdmin(): Super Admin controls
+ * CMAS technically but, per the role-hierarchy revision, does not
+ * automatically gain canManage()'s committee/assignment write access —
+ * that would conflate SYSTEM AUTHORITY with LEGISLATIVE AUTHORITY.
+ */
+function isSuperAdmin(): bool
+{
+    return currentRole() === ROLE_SUPER_ADMIN;
+}
+
+/**
+ * Either of the two SYSTEM AUTHORITY roles. Used for pages both
+ * Administrator and Super Admin may reach (e.g. User Management), as
+ * opposed to requireSuperAdmin() for Super-Admin-exclusive technical
+ * pages (backup/restore, system overview).
+ */
+function isSystemAuthority(): bool
+{
+    return hasRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
+}
+
+/**
+ * Either of the two oversight-only LEGISLATIVE AUTHORITY roles (Pro
+ * Tempore, Vice Mayor). Both get broad read visibility into committee
+ * operations but never canManage()'s write access and never
+ * isSystemAuthority()'s technical access — see config/config.php's
+ * LEGISLATIVE_OVERSIGHT_ROLES for the rationale.
+ */
+function isLegislativeOversight(): bool
+{
+    return hasRole(LEGISLATIVE_OVERSIGHT_ROLES);
+}
+
+/**
+ * Restrict a page/endpoint to the Super Admin role only. Thin wrapper
+ * around requireRole() so Super-Admin-exclusive pages (System Overview,
+ * Backup & Restore) read the same way requireLogin()/requireRole() do
+ * elsewhere, rather than spelling out requireRole([ROLE_SUPER_ADMIN])
+ * at every call site.
+ */
+function requireSuperAdmin(): void
+{
+    requireRole([ROLE_SUPER_ADMIN]);
+}
+
+/**
  * Roles allowed to manage (create/edit/delete) records in the internal
  * management modules -- Committee Management, Workload Distribution /
  * Task Assignment, and Committee Performance snapshots.
@@ -248,6 +300,12 @@ function isAdmin(): bool
  * Chairperson (ROLE_STAFF) manage these records — Administrator has the
  * full operational feature set in addition to its system-administration
  * pages. Committee Member remains excluded.
+ *
+ * Super Admin, Pro Tempore, and Vice Mayor are deliberately NOT included:
+ * per the role-hierarchy revision they get read/oversight access to these
+ * same modules (see the requireRole() calls at the top of each module),
+ * but never the write actions gated behind canManage(). A "higher"
+ * position does not imply unrestricted operational authority.
  */
 function canManage(): bool
 {
@@ -255,15 +313,29 @@ function canManage(): bool
 }
 
 /**
- * True only for the Administrator role. Administrator is the ONLY role
- * allowed to view/edit the Smart AI Setting screen inside Smart Workload
- * Distribution (modules/workload/ai_settings.php and its save/test
- * endpoints). Committee Chairperson can use Smart Workload Distribution
- * (see canManage()) but must never see or reach the AI settings screen.
+ * True for Administrator and Super Admin. Both are allowed to view/edit
+ * the Smart AI Settings screen inside Smart Workload Distribution
+ * (modules/workload/ai_settings.php and its save/test endpoints) — AI/AI
+ * connection configuration is explicitly a SYSTEM AUTHORITY function.
+ * Committee Chairperson can use Smart Workload Distribution (see
+ * canManage()) but must never see or reach the AI settings screen.
  */
 function canEditAiSettings(): bool
 {
-    return isAdmin();
+    return isSystemAuthority();
+}
+
+/**
+ * True only for Super Admin. Guards "administrator-level account"
+ * management specifically: creating, editing the role of, or deleting a
+ * user whose role is Administrator or Super Admin. A plain Administrator
+ * keeps full User Management for every other role (Chairperson, Member,
+ * Pro Tempore, Vice Mayor) — this only prevents an Administrator from
+ * creating or elevating an account to its own tier or above.
+ */
+function canManageAdminAccounts(): bool
+{
+    return isSuperAdmin();
 }
 
 /** True if current user is a Committee Member (own-data-only role). */

@@ -9,11 +9,21 @@
  */
 
 require_once __DIR__ . '/../../includes/auth.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]);
 
 $pageTitle  = 'Lungsod ng Manila Committee Management and Assignment System';
 $activeMenu = 'workload';
+$canAccessTaskTemplates = in_array(currentRole(), [ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_STAFF], true);
 $pdo = db();
+$pendingTemplateRequestCount = isSystemAuthority()
+    ? (int)$pdo->query("SELECT COUNT(*) FROM task_template_requests WHERE status = 'Pending'")->fetchColumn()
+    : 0;
+$activeJurisdictions = $pdo->query(
+    "SELECT jurisdiction_id, jurisdiction_name
+     FROM jurisdictions
+     WHERE status = 'Active'
+     ORDER BY jurisdiction_name"
+)->fetchAll();
 $selectedJurisdictionId = (int)($_GET['jurisdiction_id'] ?? 0);
 $selectedCommitteeId = (int)($_GET['committee_id'] ?? 0);
 
@@ -60,7 +70,7 @@ if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
     ?>
     <div class="app-wrapper">
       <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
-      <div class="main-content">
+      <div class="main-content admin-polished-page">
         <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
         <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
           <div>
@@ -106,8 +116,17 @@ if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
         </section>
       </div>
     </div>
+    <?php include __DIR__ . '/_task_member_modals.php'; ?>
+
     <?php
-    $extraJs = [APP_URL . '/assets/js/workload.js'];
+    $extraJs = [
+        APP_URL . '/assets/js/workload.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload.js'),
+        APP_URL . '/assets/js/workload-jurisdiction.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-jurisdiction.js'),
+        APP_URL . '/assets/js/workload-templates.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-templates.js'),
+    ];
+    if (isCommitteeMember()) {
+        $extraJs[] = APP_URL . '/assets/js/task-member-requests.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/task-member-requests.js');
+    }
     include __DIR__ . '/_workload_modal.php';
     include __DIR__ . '/../../layouts/footer.php';
     exit;
@@ -115,72 +134,89 @@ if ($selectedJurisdictionId > 0 && $selectedCommitteeId <= 0) {
 
 if ($selectedJurisdictionId <= 0 && $selectedCommitteeId <= 0) {
     if (isCommitteeMember()) {
-        $jurisdictionsStmt = $pdo->prepare(
-            "SELECT DISTINCT j.jurisdiction_id, j.jurisdiction_name, j.category, j.description,
-                    (SELECT COUNT(*) FROM committees c2 WHERE c2.jurisdiction_id = j.jurisdiction_id AND c2.status = 'Active') AS committee_count
-             FROM jurisdictions j
-             INNER JOIN committees c ON c.jurisdiction_id = j.jurisdiction_id AND c.status = 'Active'
-             INNER JOIN committee_members cm ON cm.committee_id = c.committee_id
-             WHERE j.status = 'Active' AND cm.user_id = :user_id AND cm.status = 'Active'
-             ORDER BY j.jurisdiction_name"
+    $committeeListStmt = $pdo->prepare(
+      "SELECT c.committee_id, c.committee_name, c.description, c.status,
+          j.jurisdiction_name,
+          (SELECT COUNT(*) FROM committee_members cm2
+           WHERE cm2.committee_id = c.committee_id AND cm2.status = 'Active') AS member_count
+       FROM committees c
+       LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
+       INNER JOIN committee_members cm ON cm.committee_id = c.committee_id
+       WHERE c.status = 'Active' AND cm.user_id = :user_id AND cm.status = 'Active'
+       ORDER BY c.committee_name"
         );
-        $jurisdictionsStmt->execute([':user_id' => currentUserId()]);
+    $committeeListStmt->execute([':user_id' => currentUserId()]);
     } else {
-        $jurisdictionsStmt = $pdo->query(
-            "SELECT j.jurisdiction_id, j.jurisdiction_name, j.category, j.description,
-                    (SELECT COUNT(*) FROM committees c WHERE c.jurisdiction_id = j.jurisdiction_id AND c.status = 'Active') AS committee_count
-             FROM jurisdictions j
-             WHERE j.status = 'Active'
-             ORDER BY j.jurisdiction_name"
+    $committeeListStmt = $pdo->query(
+      "SELECT c.committee_id, c.committee_name, c.description, c.status,
+          j.jurisdiction_name,
+          (SELECT COUNT(*) FROM committee_members cm
+           WHERE cm.committee_id = c.committee_id AND cm.status = 'Active') AS member_count
+       FROM committees c
+       LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
+       WHERE c.status = 'Active'
+       ORDER BY c.committee_name"
         );
     }
-    $workloadJurisdictions = $jurisdictionsStmt->fetchAll();
+  $workloadCommittees = $committeeListStmt->fetchAll();
 
     include __DIR__ . '/../../layouts/header.php';
     ?>
     <div class="app-wrapper">
       <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
-      <div class="main-content">
+      <div class="main-content admin-polished-page">
         <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
         <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
           <div>
-            <h5 class="mb-0"><i class="bi bi-bar-chart-steps text-primary"></i> Smart Workload Distribution</h5>
-            <small class="text-muted">Start by selecting a jurisdiction to view its committees and workload.</small>
+            <h5 class="mb-0">Smart Workload Distribution</h5>
+            <small class="text-muted">Select a committee to view its jurisdiction and workload.</small>
           </div>
           <?php if (canEditAiSettings()): ?><a href="ai_settings.php" class="btn btn-outline-primary btn-sm"><i class="bi bi-stars"></i> Smart AI Settings</a><?php endif; ?>
         </div>
         <section class="workload-committee-panel" aria-labelledby="workloadJurisdictionHeading">
           <div class="workload-section-heading">
-            <div><h6 id="workloadJurisdictionHeading" class="mb-1">Choose a jurisdiction</h6><p class="small text-muted mb-0">Jurisdictions are shown using the existing CMAS jurisdiction card design.</p></div>
+            <div><h6 id="workloadJurisdictionHeading" class="mb-1">Choose a committee</h6><p class="small text-muted mb-0">Each committee is listed with its assigned jurisdiction.</p></div>
           </div>
-          <?php if (empty($workloadJurisdictions)): ?>
-            <p class="text-muted small mb-0">No active jurisdictions are available.</p>
+          <?php if (empty($workloadCommittees)): ?>
+            <p class="text-muted small mb-0">No active committees are available to your account.</p>
           <?php else: ?>
-            <div class="jurisdiction-card-grid">
-              <?php
-              $jurisdictionIcons = [
-                  'Finance'         => 'bi-cash-coin',
-                  'Social Services' => 'bi-heart-pulse',
-                  'Infrastructure'  => 'bi-cone-striped',
-                  'Public Safety'   => 'bi-shield-check',
-              ];
-              foreach ($workloadJurisdictions as $jurisdiction):
-                $jIcon = $jurisdictionIcons[$jurisdiction['category'] ?? ''] ?? 'bi-geo-alt';
-              ?>
-                <a href="index.php?jurisdiction_id=<?= (int)$jurisdiction['jurisdiction_id'] ?>" class="jurisdiction-card text-decoration-none" data-jurisdiction-id="<?= (int)$jurisdiction['jurisdiction_id'] ?>" aria-label="View <?= e($jurisdiction['jurisdiction_name']) ?> workload">
+            <div class="workload-committee-search">
+              <label class="visually-hidden" for="workloadCommitteeSearch">Search committees</label>
+              <i class="bi bi-search" aria-hidden="true"></i>
+              <input type="search" class="form-control" id="workloadCommitteeSearch" placeholder="Search committees or jurisdictions..." autocomplete="off">
+            </div>
+            <div class="jurisdiction-card-grid workload-committee-picker">
+              <?php foreach ($workloadCommittees as $committee): ?>
+                <a href="committee.php?committee_id=<?= (int)$committee['committee_id'] ?>" class="jurisdiction-card text-decoration-none" aria-label="View <?= e($committee['committee_name']) ?> workload" data-workload-committee-search="<?= e($committee['committee_name'] . ' ' . ($committee['jurisdiction_name'] ?? '')) ?>">
                   <div class="jurisdiction-card-top">
-                    <span class="jurisdiction-card-icon"><i class="bi <?= e($jIcon) ?>"></i></span>
-                    <span class="jurisdiction-card-count"><?= (int)$jurisdiction['committee_count'] ?> committee<?= (int)$jurisdiction['committee_count'] === 1 ? '' : 's' ?></span>
+                    <span class="jurisdiction-card-icon"><i class="bi bi-people-fill"></i></span>
+                    <span class="jurisdiction-card-count"><?= (int)$committee['member_count'] ?> member<?= (int)$committee['member_count'] === 1 ? '' : 's' ?></span>
                   </div>
                   <div class="jurisdiction-card-details">
-                    <div class="jurisdiction-card-meta"><span class="jurisdiction-card-chip"><?= e($jurisdiction['category'] ?: 'General scope') ?></span></div>
-                    <div class="jurisdiction-card-title"><?= e($jurisdiction['jurisdiction_name']) ?></div>
-                    <div class="jurisdiction-card-description"><?= e(truncate($jurisdiction['description'] ?: 'Select to view associated committees and workloads.', 110)) ?></div>
-                    <div class="jurisdiction-card-footer"><span class="jurisdiction-card-status status-active">Active</span><span class="jurisdiction-card-cta">View committees <i class="bi bi-arrow-right"></i></span></div>
+                    <?php if (!empty($committee['jurisdiction_name'])): ?>
+                      <div class="jurisdiction-card-meta"><span class="jurisdiction-card-chip"><i class="bi bi-geo-alt"></i> <?= e($committee['jurisdiction_name']) ?></span></div>
+                    <?php endif; ?>
+                    <div class="jurisdiction-card-title"><?= e($committee['committee_name']) ?></div>
+                    <div class="jurisdiction-card-description"><?= e(truncate($committee['description'] ?: 'Open this committee to view tasks and workload.', 110)) ?></div>
+                    <div class="jurisdiction-card-footer"><span class="jurisdiction-card-status status-active"><?= e($committee['status']) ?></span><span class="jurisdiction-card-cta">View workload <i class="bi bi-arrow-right"></i></span></div>
                   </div>
                 </a>
               <?php endforeach; ?>
             </div>
+            <p class="workload-committee-search-empty text-muted small d-none mb-0" id="workloadCommitteeSearchEmpty" role="status">No committees match your search.</p>
+            <script>
+              document.getElementById('workloadCommitteeSearch').addEventListener('input', function () {
+                const query = this.value.trim().toLocaleLowerCase();
+                const cards = document.querySelectorAll('.workload-committee-picker [data-workload-committee-search]');
+                let visibleCount = 0;
+                cards.forEach(function (card) {
+                  const matches = card.dataset.workloadCommitteeSearch.toLocaleLowerCase().includes(query);
+                  card.classList.toggle('d-none', !matches);
+                  if (matches) visibleCount++;
+                });
+                document.getElementById('workloadCommitteeSearchEmpty').classList.toggle('d-none', visibleCount > 0);
+              });
+            </script>
           <?php endif; ?>
         </section>
       </div>
@@ -259,7 +295,11 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
     <?php
-    $extraJs = [APP_URL . '/assets/js/workload.js'];
+    $extraJs = [
+        APP_URL . '/assets/js/workload.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload.js'),
+        APP_URL . '/assets/js/workload-jurisdiction.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-jurisdiction.js'),
+        APP_URL . '/assets/js/workload-templates.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-templates.js'),
+    ];
     include __DIR__ . '/_workload_modal.php';
     include __DIR__ . '/../../layouts/footer.php';
     exit;
@@ -267,7 +307,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
 if (isCommitteeMember()) {
   $committeeStmt = $pdo->prepare(
-    "SELECT c.committee_id, c.committee_name
+    "SELECT c.committee_id, c.committee_name, c.jurisdiction_id,
+            (SELECT GROUP_CONCAT(DISTINCT j2.jurisdiction_id
+                                 ORDER BY (j2.jurisdiction_id = c.jurisdiction_id) DESC, j2.jurisdiction_name
+                                 SEPARATOR ',')
+             FROM jurisdictions j2
+             WHERE j2.status = 'Active'
+               AND (j2.category = c.committee_name OR j2.jurisdiction_id = c.jurisdiction_id)
+            ) AS jurisdiction_ids
      FROM committees c
      INNER JOIN committee_members cm ON cm.committee_id = c.committee_id
      WHERE c.status = 'Active' AND cm.user_id = :uid AND cm.status = 'Active'
@@ -276,12 +323,33 @@ if (isCommitteeMember()) {
   $committeeStmt->execute([':uid' => currentUserId()]);
   $committees = $committeeStmt->fetchAll();
 } else {
-  $committees = $pdo->query("SELECT committee_id, committee_name FROM committees WHERE status = 'Active' ORDER BY committee_name")->fetchAll();
+  $committees = $pdo->query(
+    "SELECT c.committee_id, c.committee_name, c.jurisdiction_id,
+            (SELECT GROUP_CONCAT(DISTINCT j2.jurisdiction_id
+                                 ORDER BY (j2.jurisdiction_id = c.jurisdiction_id) DESC, j2.jurisdiction_name
+                                 SEPARATOR ',')
+             FROM jurisdictions j2
+             WHERE j2.status = 'Active'
+               AND (j2.category = c.committee_name OR j2.jurisdiction_id = c.jurisdiction_id)
+            ) AS jurisdiction_ids
+     FROM committees c
+     WHERE c.status = 'Active'
+     ORDER BY c.committee_name"
+  )->fetchAll();
 }
 $selectedCommitteeName = '';
+$selectedCommitteeJurisdictionId = 0;
 foreach ($committees as $committee) {
   if ((int)$committee['committee_id'] === $selectedCommitteeId) {
     $selectedCommitteeName = $committee['committee_name'];
+    $selectedCommitteeJurisdictionId = (int)($committee['jurisdiction_id'] ?? 0);
+    $committeeJurisdictionIds = array_filter(array_map(
+      'intval',
+      explode(',', (string)($committee['jurisdiction_ids'] ?? ''))
+    ));
+    if (!in_array($selectedCommitteeJurisdictionId, $committeeJurisdictionIds, true)) {
+      $selectedCommitteeJurisdictionId = (int)($committeeJurisdictionIds[0] ?? 0);
+    }
     break;
   }
 }
@@ -343,14 +411,22 @@ include __DIR__ . '/../../layouts/header.php';
 <div class="app-wrapper">
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content workload-distribution-page admin-polished-page">
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
       <h5 class="mb-0"><i class="bi bi-bar-chart-steps text-primary"></i> Smart Workload Distribution</h5>
       <small class="text-muted">Track task load across committee members and see who has capacity.</small>
     </div>
-    <?php if (canEditAiSettings() || canManage()): ?>
+    <?php if ($canAccessTaskTemplates || canEditAiSettings() || canManage()): ?>
       <div class="d-flex gap-2">
+        <?php if ($canAccessTaskTemplates): ?>
+          <a href="<?= e(APP_URL) ?>/modules/workload/task_templates.php" class="btn btn-primary btn-sm">
+            <i class="bi bi-list-check"></i> Standard Task Templates
+            <?php if ((isAdmin() || isSuperAdmin()) && $pendingTemplateRequestCount > 0): ?>
+              <span class="badge rounded-pill bg-light text-primary ms-1"><?= $pendingTemplateRequestCount ?></span>
+            <?php endif; ?>
+          </a>
+        <?php endif; ?>
         <?php if (canEditAiSettings()): ?>
           <a href="ai_settings.php" class="btn btn-outline-primary btn-sm" title="Adjust Smart AI Workload Distribution settings">
             <i class="bi bi-stars"></i> Smart AI Settings
@@ -358,7 +434,7 @@ include __DIR__ . '/../../layouts/header.php';
         <?php endif; ?>
         <?php if (canManage() && $selectedCommitteeId > 0): ?>
           <button type="button" class="btn btn-primary btn-sm" id="btnAddTask">
-            <i class="bi bi-plus-circle"></i> Assign Task
+            <i class="bi bi-plus-circle"></i> Propose Task
           </button>
         <?php endif; ?>
       </div>
@@ -431,9 +507,11 @@ include __DIR__ . '/../../layouts/header.php';
           <?= $selectedCommitteeName ? 'Showing tasks for ' . e($selectedCommitteeName) . '.' : 'Select a committee to see only its related workload and tasks.' ?>
         </p>
       </div>
-      <?php if ($selectedCommitteeId > 0): ?>
-        <button type="button" class="workload-clear-committee" id="clearCommitteeFilter">Choose another committee</button>
-      <?php endif; ?>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <?php if ($selectedCommitteeId > 0): ?>
+          <button type="button" class="workload-clear-committee" id="clearCommitteeFilter">Choose another committee</button>
+        <?php endif; ?>
+      </div>
     </div>
     <div class="workload-committee-grid">
       <?php foreach ($committees as $i => $c):
@@ -462,7 +540,7 @@ include __DIR__ . '/../../layouts/header.php';
   </section>
 
   <?php if ($selectedCommitteeId > 0): ?>
-    <div class="card mb-3">
+    <div class="card mb-3 workload-distribution-filter">
       <div class="card-body py-3">
         <form id="filterForm" class="d-flex flex-wrap gap-2 align-items-center">
           <input type="hidden" name="committee_id" value="<?= (int)$selectedCommitteeId ?>">
@@ -479,8 +557,8 @@ include __DIR__ . '/../../layouts/header.php';
             <option value="priority">Priority</option>
           </select>
           <select class="form-select form-select-sm" name="dir" aria-label="Sort direction" style="min-width:90px;">
-            <option value="asc" selected>Asc</option>
-            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+            <option value="desc" selected>Desc</option>
           </select>
           <button type="submit" class="btn btn-primary btn-sm position-relative" id="filterApply">
             <i class="bi bi-check2"></i> Apply<span class="apply-pending-dot d-none" id="applyPendingDot" aria-hidden="true"></span>
@@ -490,7 +568,7 @@ include __DIR__ . '/../../layouts/header.php';
       </div>
     </div>
 
-    <div class="card">
+    <div class="card workload-distribution-results">
       <div id="workloadTableWrap">
         <div class="workload-mini-overview">
           <div class="workload-mini-overview-header">
@@ -518,7 +596,7 @@ include __DIR__ . '/../../layouts/header.php';
         <input type="hidden" name="id" id="wl_id" value="0">
         <input type="hidden" name="ai_recommendation_id" id="wl_ai_recommendation_id" value="">
         <div class="modal-header">
-          <h5 class="modal-title" id="taskModalTitle"><i class="bi bi-bar-chart-steps"></i> Assign Task</h5>
+          <h5 class="modal-title" id="taskModalTitle"><i class="bi bi-bar-chart-steps"></i> Propose Task</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -531,24 +609,36 @@ include __DIR__ . '/../../layouts/header.php';
           </div>
 
           <section class="task-step-panel is-active" data-step-panel="1">
-            <div class="task-step-heading"><span class="task-step-kicker">Step 1</span><h6>Set up the task</h6><p>Choose the committee and give the assignment a clear title.</p></div>
+            <div class="task-step-heading"><span class="task-step-kicker">Step 1</span><h6>Set up the task</h6><p>Choose the committee and standard task for this assignment.</p></div>
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Committee <span class="text-danger">*</span></label>
                 <select name="committee_id" id="wl_committee" class="form-select" required>
                   <option value="">-- Select Committee --</option>
                   <?php foreach ($committees as $c): ?>
-                    <option value="<?= (int)$c['committee_id'] ?>"><?= e($c['committee_name']) ?></option>
+                    <option value="<?= (int)$c['committee_id'] ?>" data-jurisdiction-id="<?= e((string)($c['jurisdiction_ids'] ?? '')) ?>" <?= (int)$c['committee_id'] === $selectedCommitteeId ? 'selected' : '' ?>><?= e($c['committee_name']) ?></option>
                   <?php endforeach; ?>
                 </select>
               </div>
               <div class="col-md-6">
-                <label class="form-label">Task Title <span class="text-danger">*</span></label>
-                <input type="text" name="task_title" id="wl_title" class="form-control" required maxlength="255" placeholder="e.g. Draft Budget Hearing Report">
+                <label class="form-label">Select Jurisdiction <span class="text-danger">*</span></label>
+                <select name="jurisdiction_id" id="wl_jurisdiction" class="form-select" required>
+                  <option value="">-- Select Jurisdiction --</option>
+                  <?php foreach ($activeJurisdictions as $jurisdiction): ?>
+                    <option value="<?= (int)$jurisdiction['jurisdiction_id'] ?>" <?= (int)$jurisdiction['jurisdiction_id'] === $selectedCommitteeJurisdictionId ? 'selected' : '' ?>><?= e($jurisdiction['jurisdiction_name']) ?></option>
+                  <?php endforeach; ?>
+                </select>
               </div>
               <div class="col-12">
+                <label class="form-label">Select Standard Task <span class="text-danger">*</span></label>
+                <select name="task_template_id" id="wl_template" class="form-select" required disabled>
+                  <option value="">-- Select Jurisdiction First --</option>
+                </select>
+              </div>
+              <input type="hidden" name="task_title" id="wl_title">
+              <div class="col-12">
                 <button type="button" class="btn btn-outline-primary" id="btnGenerateAI"><i class="bi bi-stars"></i> Generate with AI</button>
-                <div class="form-text">Optional: generate assignment details after selecting a committee and entering a title.</div>
+                <div class="form-text">Optional: generate assignment details after selecting a standard task.</div>
               </div>
             </div>
             <div class="mt-3" id="wl_ai_loading" style="display:none;"><div class="task-ai-loading"><span class="spinner-border spinner-border-sm text-primary"></span><span class="fw-semibold small text-primary" id="wl_ai_loading_text">AI is analyzing the task...</span></div></div>
@@ -560,11 +650,11 @@ include __DIR__ . '/../../layouts/header.php';
               <div class="col-md-6"><label class="form-label">Assign To <span class="text-danger">*</span></label><select name="committee_member_id" id="wl_member" class="form-select" required><option value="">-- Select Committee First --</option></select></div>
               <div class="col-md-3"><label class="form-label">Priority</label><select name="priority" id="wl_priority" class="form-select"><?php foreach (['Low', 'Medium', 'High', 'Urgent'] as $p): ?><option value="<?= e($p) ?>" <?= $p === 'Medium' ? 'selected' : '' ?>><?= e($p) ?></option><?php endforeach; ?></select></div>
             </div>
+            <div class="mt-3" id="wl_ai_panel_wrap" style="display:none;"><div class="task-ai-result"><div class="d-flex justify-content-between align-items-center"><span class="small fw-semibold text-primary"><i class="bi bi-cpu"></i> AI Recommendation</span><span id="wl_ai_error_badge" class="badge bg-warning text-dark" style="display:none;"></span></div><div id="wl_ai_summary" class="small mt-2"></div><div id="wl_ai_reasoning" class="small text-muted mt-2 fst-italic"></div></div></div>
           </section>
 
           <section class="task-step-panel" data-step-panel="3">
-            <div class="task-step-heading"><span class="task-step-kicker">Step 3</span><h6>Review and save</h6><p>Complete the details, then save the assignment.</p></div>
-            <div class="mt-3" id="wl_ai_panel_wrap" style="display:none;"><div class="task-ai-result"><div class="d-flex justify-content-between align-items-center"><span class="small fw-semibold text-primary"><i class="bi bi-cpu"></i> AI Recommendation</span><span id="wl_ai_error_badge" class="badge bg-warning text-dark" style="display:none;"></span></div><div id="wl_ai_summary" class="small mt-2"></div><div id="wl_ai_reasoning" class="small text-muted mt-2 fst-italic"></div></div></div>
+            <div class="task-step-heading"><span class="task-step-kicker">Step 3</span><h6>Review and submit</h6><p>Complete the details and submit the proposal for the Committee Chairperson or an Administrator to review.</p></div>
             <div class="row g-3">
               <div class="col-12"><label class="form-label task-description-label">Description <span id="wl_ai_desc_badge" class="badge bg-primary-subtle text-primary border border-primary-subtle task-ai-badge" style="display:none;"><i class="bi bi-stars"></i> AI Generated</span></label><textarea name="task_description" id="wl_description" class="form-control" rows="3" placeholder="Describe the task, or generate one in Step 1."></textarea></div>
               <div class="col-md-6"><label class="form-label">Due Date</label><input type="date" name="due_date" id="wl_due" class="form-control"></div>
@@ -575,7 +665,7 @@ include __DIR__ . '/../../layouts/header.php';
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" class="task-step-button" id="taskStepPrevious"><i class="bi bi-arrow-left"></i> Previous</button>
           <button type="button" class="task-step-button task-step-button-primary" id="taskStepNext">Next <i class="bi bi-arrow-right"></i></button>
-          <button type="submit" class="btn btn-primary" id="taskStepSave" style="display:none;"><i class="bi bi-check-circle"></i> Save Task</button>
+          <button type="submit" class="btn btn-primary" id="taskStepSave" style="display:none;"><i class="bi bi-send"></i> Submit for Review</button>
         </div>
       </form>
     </div>
@@ -584,6 +674,10 @@ include __DIR__ . '/../../layouts/header.php';
 <?php endif; ?>
 
 <?php
-$extraJs = [APP_URL . '/assets/js/workload.js'];
+$extraJs = [
+    APP_URL . '/assets/js/workload.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload.js'),
+    APP_URL . '/assets/js/workload-jurisdiction.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-jurisdiction.js'),
+    APP_URL . '/assets/js/workload-templates.js?v=' . (int)@filemtime(__DIR__ . '/../../assets/js/workload-templates.js'),
+];
 include __DIR__ . '/../../layouts/footer.php';
 ?>

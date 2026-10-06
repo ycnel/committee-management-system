@@ -248,6 +248,42 @@ class GeminiAI
     }
 
     /**
+     * Generate editable legislative-report wording from explicitly supplied
+     * source material. This never selects a committee action or legal citation.
+     */
+    public function generateLegislativeReportSections(array $context, string $requestedSection = 'all'): array
+    {
+        if (!$this->enabled || $this->apiKey === '') {
+            return ['available' => false, 'sections' => []];
+        }
+        $allowed = ['matter_referred', 'findings', 'discussion_analysis', 'conclusion', 'recommendations'];
+        $sections = $requestedSection === 'all'
+            ? ['matter_referred', 'findings', 'discussion_analysis', 'conclusion']
+            : (in_array($requestedSection, $allowed, true) ? [$requestedSection] : []);
+        if (!$sections) return ['available' => false, 'sections' => []];
+
+        $systemPrompt = 'You assist with drafting a Philippine local legislative committee report. Use only facts and text explicitly present in the supplied JSON. Never invent or infer laws, ordinances, legal citations, dates, meeting details, attendance, discussions, testimony, evidence, votes, committee decisions, amendments, or outcomes. If information is absent, leave the section empty or state that source information is needed. Do not treat committee jurisdiction as proof that a measure is legally valid. Do not select or declare an official recommendation/action. For a requested recommendations section, provide only a clearly conditional draft suggestion grounded in stated facts and explicitly label it "AI suggestion for human consideration — not Committee action." Output JSON only, with only the requested keys as strings.';
+        $userPrompt = 'Draft editable text for these sections only: ' . implode(', ', $sections)
+            . ". Preserve uncertainty and identify missing facts instead of filling gaps. Source JSON:\n"
+            . json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        try {
+            $raw = $this->callGemini($systemPrompt, $userPrompt);
+            $clean = trim(preg_replace('/^```json\s*|```$/i', '', $raw) ?? $raw);
+            $decoded = json_decode($clean, true);
+            if (!is_array($decoded)) return ['available' => false, 'sections' => []];
+            $result = [];
+            foreach ($sections as $section) {
+                $value = is_string($decoded[$section] ?? null) ? trim(strip_tags($decoded[$section])) : '';
+                $result[$section] = mb_substr($value, 0, 6000);
+            }
+            return ['available' => true, 'sections' => $result];
+        } catch (Throwable $e) {
+            error_log('Legislative report AI error: ' . $e->getMessage());
+            return ['available' => false, 'sections' => []];
+        }
+    }
+
+    /**
      * Main entry point for the new workflow.
      *
      * $taskTitle   - what the admin typed into Task Title.

@@ -7,7 +7,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 
 $pageTitle  = 'Audit Logs';
 $activeMenu = 'activity_logs';
@@ -144,13 +144,15 @@ function activityDeviceLabel(?string $ua): array
   $mobile = stripos($ua, 'Mobile|Android|iPhone|iPad') !== false;
   return [$browser . ' · ' . $os, $mobile ? 'bi-phone' : 'bi-display'];
 }
+//      scared of the dark? 
+//      cicc i2 ba yung darkweb black terminal?
 
 include __DIR__ . '/../layouts/header.php';
 ?>
 <div class="app-wrapper">
   <?php include __DIR__ . '/../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content admin-polished-page audit-logs-page">
   <?php include __DIR__ . '/../layouts/content-topbar.php'; ?>
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
@@ -193,7 +195,7 @@ include __DIR__ . '/../layouts/header.php';
     </div>
   </div>
 
-  <div class="row g-3 mb-3">
+  <div class="audit-summary-grid mb-3">
     <?php
       $summaryCards = [
         ['Total Activities', $summary['total_activities'] ?? 0, 'bi-activity'],
@@ -204,7 +206,7 @@ include __DIR__ . '/../layouts/header.php';
       ];
     ?>
     <?php foreach ($summaryCards as $card): ?>
-      <div class="col-6 col-md-4 col-lg"><div class="card stat-card activity-summary-card"><div class="card-body"><i class="bi <?= e($card[2]) ?> stat-icon"></i><div class="stat-value"><?= (int)$card[1] ?></div><div class="stat-label"><?= e($card[0]) ?></div></div></div></div>
+      <div class="card stat-card activity-summary-card"><div class="card-body"><i class="bi <?= e($card[2]) ?> stat-icon"></i><div class="stat-value"><?= (int)$card[1] ?></div><div class="stat-label"><?= e($card[0]) ?></div></div></div>
     <?php endforeach; ?>
   </div>
 

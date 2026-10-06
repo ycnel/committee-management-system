@@ -80,6 +80,8 @@
 
           document.getElementById('jvName').textContent = j.jurisdiction_name;
           document.getElementById('jvNameDl').textContent = j.jurisdiction_name;
+          document.getElementById('jvFullViewLink').href =
+            window.APP_URL + '/modules/jurisdictions/view.php?id=' + encodeURIComponent(j.jurisdiction_id);
           const status = document.getElementById('jvStatus');
           status.textContent = j.status;
           status.className = 'badge ms-1 ' + statusBadge(j.status);
@@ -89,9 +91,6 @@
           dlBadge.className = 'badge ' + statusBadge(j.status);
           dlBadge.textContent = j.status;
           statusDl.appendChild(dlBadge);
-          document.getElementById('jvCount').textContent = data.committees.length;
-          document.getElementById('jvCountBadge').textContent = data.committees.length;
-          text('jvCategory', j.category);
           text('jvDescription', j.description);
           text('jvScope', j.scope_definition);
           text('jvCovered', j.covered_areas);
@@ -107,41 +106,6 @@
             notesWrap.classList.add('d-none');
           }
 
-          const tbody = document.getElementById('jvCommitteesBody');
-          const empty = document.getElementById('jvCommitteesEmpty');
-          const tableWrap = document.getElementById('jvCommitteesTableWrap');
-          tbody.innerHTML = '';
-          if (!data.committees.length) {
-            empty.classList.remove('d-none');
-            tableWrap.classList.add('d-none');
-          } else {
-            empty.classList.add('d-none');
-            tableWrap.classList.remove('d-none');
-            data.committees.forEach(function (c) {
-              const tr = document.createElement('tr');
-              const tdName = document.createElement('td');
-              tdName.textContent = c.committee_name;
-              const tdStatus = document.createElement('td');
-              const badge = document.createElement('span');
-              badge.className = 'badge ' + statusBadge(c.status);
-              badge.textContent = c.status;
-              tdStatus.appendChild(badge);
-              const tdActions = document.createElement('td');
-              tdActions.className = 'text-end';
-              const view = document.createElement('a');
-              view.className = 'btn btn-outline-secondary btn-sm';
-              view.href = window.APP_URL + '/modules/committees/view.php?id=' + encodeURIComponent(c.committee_id);
-              view.title = 'View committee';
-              const icon = document.createElement('i');
-              icon.className = 'bi bi-eye';
-              view.appendChild(icon);
-              tdActions.appendChild(view);
-              tr.appendChild(tdName);
-              tr.appendChild(tdStatus);
-              tr.appendChild(tdActions);
-              tbody.appendChild(tr);
-            });
-          }
           viewModal.show();
         })
         .catch(function () { appToast('error', 'Unable to load jurisdiction right now.'); });
@@ -172,6 +136,59 @@
   }
 
   bindRowEvents();
+
+  wrap.addEventListener('click', function (event) {
+    const toggleButton = event.target.closest('.btn-toggle-committee-jurisdictions');
+    if (toggleButton) {
+      const panel = document.getElementById(toggleButton.getAttribute('aria-controls'));
+      if (!panel) return;
+      const isExpanded = toggleButton.getAttribute('aria-expanded') === 'true';
+      toggleButton.setAttribute('aria-expanded', String(!isExpanded));
+      panel.hidden = isExpanded;
+      const committeeName = toggleButton.closest('.committee-jurisdiction-card')
+        .querySelector('.committee-jurisdiction-header h6').textContent.trim();
+      toggleButton.setAttribute('aria-label', (isExpanded ? 'Show' : 'Hide') + ' jurisdictions for ' + committeeName);
+      toggleButton.setAttribute('title', (isExpanded ? 'Show' : 'Hide') + ' jurisdictions for ' + committeeName);
+      return;
+    }
+
+    const deleteButton = event.target.closest('[data-confirm-delete][data-delete-url]');
+    if (!deleteButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    Swal.fire({
+      title: 'Remove jurisdiction?',
+      text: 'This is a sensitive administrative action. Enter your current password to continue.',
+      icon: 'warning',
+      input: 'password',
+      inputPlaceholder: 'Current account password',
+      inputAttributes: { autocomplete: 'current-password', autocapitalize: 'off' },
+      showCancelButton: true,
+      confirmButtonText: 'Verify and remove',
+      confirmButtonColor: '#a4302a',
+      inputValidator: function (value) {
+        return value ? null : 'Enter your current password to continue.';
+      }
+    }).then(function (result) {
+      if (!result.isConfirmed) return;
+      appFetchJson(deleteButton.dataset.deleteUrl, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          csrf_token: window.APP_CSRF_TOKEN || '',
+          current_password: result.value
+        }).toString()
+      }).then(function (data) {
+        if (data.success) {
+          appToast('success', data.message || 'Jurisdiction removed.');
+          loadTable();
+        } else if (!data.session_expired) {
+          Swal.fire('Unable to remove jurisdiction', data.message || 'The request could not be completed.', 'error');
+        }
+      });
+    });
+  });
 
   /* ================= Create / Edit Modal ================= */
   const modalEl = document.getElementById('jurisdictionModal');
@@ -213,16 +230,30 @@
   });
 
   const addBtn = document.getElementById('btnAddJurisdiction');
+  function openNewJurisdiction(committeeName) {
+    form.reset();
+    document.getElementById('jd_id').value = 0;
+    document.getElementById('jd_status').value = 'Active';
+    const categorySelect = document.getElementById('jd_category');
+    Array.from(categorySelect.querySelectorAll('[data-legacy-category]')).forEach(option => option.remove());
+    categorySelect.value = committeeName || '';
+    goToJurisdictionStep(1);
+    document.getElementById('jurisdictionModalTitle').innerHTML = '<i class="bi bi-geo-alt"></i> New Jurisdiction';
+    modal.show();
+  }
+
   if (addBtn) {
     addBtn.addEventListener('click', function () {
-      form.reset();
-      document.getElementById('jd_id').value = 0;
-      document.getElementById('jd_status').value = 'Active';
-      goToJurisdictionStep(1);
-      document.getElementById('jurisdictionModalTitle').innerHTML = '<i class="bi bi-geo-alt"></i> New Jurisdiction';
-      modal.show();
+      openNewJurisdiction('');
     });
   }
+
+  wrap.addEventListener('click', function (event) {
+    const addJurisdictionButton = event.target.closest('.btn-add-jurisdiction');
+    if (addJurisdictionButton) {
+      openNewJurisdiction(addJurisdictionButton.dataset.committeeName || '');
+    }
+  });
 
   function openEditModal(id) {
     appGet(window.APP_URL + '/modules/jurisdictions/ajax_get.php?id=' + id).then(data => {
@@ -231,7 +262,16 @@
       form.reset();
       document.getElementById('jd_id').value = j.jurisdiction_id;
       document.getElementById('jd_name').value = j.jurisdiction_name || '';
-      document.getElementById('jd_category').value = j.category || '';
+      const categorySelect = document.getElementById('jd_category');
+      const legacyCategory = j.category || '';
+      if (legacyCategory && !Array.from(categorySelect.options).some(option => option.value === legacyCategory)) {
+        const legacyOption = document.createElement('option');
+        legacyOption.value = legacyCategory;
+        legacyOption.textContent = legacyCategory + ' (existing value)';
+        legacyOption.dataset.legacyCategory = 'true';
+        categorySelect.appendChild(legacyOption);
+      }
+      categorySelect.value = legacyCategory;
       document.getElementById('jd_description').value = j.description || '';
       document.getElementById('jd_scope_definition').value = j.scope_definition || '';
       document.getElementById('jd_covered_areas').value = j.covered_areas || '';

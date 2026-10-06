@@ -10,44 +10,120 @@
 
 $activeMenu = $activeMenu ?? '';
 $role = currentRole();
+$pendingTaskRequestCount = 0;
+$pendingApprovalRequestCount = 0;
+if (isAdmin()) {
+    try {
+        $pendingTaskRequestCount = (int)db()->query(
+            "SELECT COUNT(*) FROM workload_assignment_proposals WHERE state = 'Pending'"
+        )->fetchColumn();
+    } catch (PDOException $e) {
+        error_log('Task request sidebar count failed: ' . $e->getMessage());
+    }
+}
+if (in_array($role, [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE], true)) {
+    try {
+        $approvalParams = [];
+        if (isCommitteeMember()) {
+            $completionScope = 'submitted_by = :completion_submitted_by';
+            $removalScope = 'submitted_by = :removal_submitted_by';
+            $approvalParams[':completion_submitted_by'] = (int)currentUserId();
+            $approvalParams[':removal_submitted_by'] = (int)currentUserId();
+        } elseif (!isAdmin()) {
+            $completionScope = "committee_id IN (
+                SELECT committee_id FROM committee_members
+                WHERE user_id = :completion_chair_id
+                  AND member_role = 'Chairperson' AND status = 'Active'
+            )";
+            $removalScope = "committee_id IN (
+                SELECT committee_id FROM committee_members
+                WHERE user_id = :removal_chair_id
+                  AND member_role = 'Chairperson' AND status = 'Active'
+            )";
+            $approvalParams[':completion_chair_id'] = (int)currentUserId();
+            $approvalParams[':removal_chair_id'] = (int)currentUserId();
+        } else {
+            $completionScope = '1 = 1';
+            $removalScope = '1 = 1';
+        }
+        $approvalCountStmt = db()->prepare(
+            "SELECT
+                (SELECT COUNT(*) FROM task_completion_requests
+                 WHERE status = 'Pending' AND $completionScope) +
+                (SELECT COUNT(*) FROM task_removal_requests
+                 WHERE status = 'Pending' AND $removalScope)"
+        );
+        $approvalCountStmt->execute($approvalParams);
+        $pendingApprovalRequestCount = (int)$approvalCountStmt->fetchColumn();
+    } catch (PDOException $e) {
+        error_log('Approval request sidebar count failed: ' . $e->getMessage());
+    }
+}
 
 /**
- * Each nav item: key, label, icon, url, roles allowed to see it.
+ * Each nav item: key, label, icon, url, roles allowed to see it, and an
+ * optional 'section' label rendered as a divider the first time it's seen
+ * (only counting items actually visible to the current role, so a hidden
+ * item never leaves a stray/empty header behind).
  *
- * Administrator gets every operational module (full feature set) plus
- * its own system-administration items. Committee Member keeps its
- * read-only subset.
+ * Role-hierarchy revision: two authority layers, kept visually separate.
+ *   - Operational items (Dashboard through Reports & Analytics):
+ *     legislative roles and Super Admin see these read-only at minimum (canManage() on the
+ *     page itself, not this menu, decides who additionally gets write
+ *     buttons).
+ *   - "Administration" (Audit Logs, User Management, Smart AI Settings):
+ *     Administrator's existing operational baseline, preserved as-is, now
+ *     also reachable by Super Admin.
+ *   - "System Administration": Super-Admin-exclusive technical functions
+ *     (System Overview, Backup & Restore). Administrator does not get
+ *     these — technical/system authority stays with Super Admin only.
  */
 $menuItems = [
     ['key' => 'dashboard',     'label' => 'Dashboard',              'icon' => 'bi-speedometer2',   'url' => '/dashboard.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
-
-    ['key' => 'committees',    'label' => 'Committee Management',   'icon' => 'bi-diagram-3',      'url' => '/modules/committees/index.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
 
     ['key' => 'workload',      'label' => 'Workload Distribution',  'icon' => 'bi-bar-chart-steps', 'url' => '/modules/workload/index.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
 
-    ['key' => 'performance',   'label' => 'Committee Performance',  'icon' => 'bi-graph-up-arrow', 'url' => '/modules/performance/index.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+    ['key' => 'committee_group', 'children' => [
+      ['key' => 'committees', 'label' => 'Committee Management', 'icon' => 'bi-diagram-3', 'url' => '/modules/committees/index.php',
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
+      ['key' => 'performance', 'label' => 'Committee Performance', 'icon' => 'bi-graph-up-arrow', 'url' => '/modules/performance/index.php',
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
+      ['key' => 'committee_reports', 'label' => 'Committee Reports', 'icon' => 'bi-file-earmark-text', 'url' => '/modules/committee_reports/index.php',
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
+    ]],
 
     ['key' => 'jurisdictions', 'label' => 'Jurisdictions',          'icon' => 'bi-scale',          'url' => '/modules/jurisdictions/index.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF]],
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
 
-    ['key' => 'committee_reports', 'label' => 'Committee Reports',  'icon' => 'bi-file-earmark-text', 'url' => '/modules/committee_reports/index.php',
+    ['key' => 'task_templates', 'label' => 'Standard Task Templates', 'icon' => 'bi-list-check', 'url' => '/modules/workload/task_templates.php',
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN]],
+
+    ['key' => 'requests_group', 'children' => [
+      ['key' => 'task_requests', 'label' => isAdmin() ? 'Pending Task Requests' : (currentRole() === ROLE_STAFF ? 'Committee Task Requests' : 'My Task Requests'), 'icon' => 'bi-clipboard-check', 'url' => '/modules/workload/task_requests.php',
         'roles' => [ROLE_ADMIN, ROLE_STAFF]],
+      ['key' => 'approval_center', 'label' => 'Approval Center', 'icon' => 'bi-check2-square', 'url' => '/modules/workload/approval_center.php',
+        'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]],
+    ]],
 
     ['key' => 'reports_analytics', 'label' => 'Reports & Analytics', 'icon' => 'bi-bar-chart-line', 'url' => '/modules/reports/index.php',
-        'roles' => [ROLE_ADMIN, ROLE_STAFF]],
+      'roles' => [ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]],
 
     ['key' => 'activity_logs', 'label' => 'Audit Logs',             'icon' => 'bi-clock-history',  'url' => '/pages/activity_logs.php',
-      'roles' => [ROLE_ADMIN]],
+        'roles' => [ROLE_ADMIN, ROLE_SUPER_ADMIN], 'section' => 'Administration'],
 
     ['key' => 'users',         'label' => 'User Management',        'icon' => 'bi-person-gear',    'url' => '/pages/users.php',
-        'roles' => [ROLE_ADMIN]],
+        'roles' => [ROLE_ADMIN, ROLE_SUPER_ADMIN], 'section' => 'Administration'],
 
     ['key' => 'ai_settings',   'label' => 'Smart AI Settings',      'icon' => 'bi-robot',          'url' => '/modules/workload/ai_settings.php',
-        'roles' => [ROLE_ADMIN]],
+        'roles' => [ROLE_ADMIN, ROLE_SUPER_ADMIN], 'section' => 'Administration'],
+
+    ['key' => 'system_overview', 'label' => 'System Overview',      'icon' => 'bi-hdd-network',    'url' => '/modules/system/index.php',
+        'roles' => [ROLE_SUPER_ADMIN], 'section' => 'System Administration'],
+
+    ['key' => 'system_backup', 'label' => 'Backup & Restore',       'icon' => 'bi-database-down',  'url' => '/modules/system/backup.php',
+        'roles' => [ROLE_SUPER_ADMIN], 'section' => 'System Administration'],
 ];
 ?>
 
@@ -74,8 +150,60 @@ $menuItems = [
   <nav class="sidebar-nav">
 
     <ul class="nav-list">
+      <?php $lastSection = null; ?>
       <?php foreach ($menuItems as $item): ?>
+        <?php if (in_array($item['key'], ['committee_group', 'requests_group'], true)): ?>
+          <?php
+            $groupMenuItems = array_values(array_filter(
+                $item['children'],
+                static fn(array $child): bool => in_array($role, $child['roles'], true)
+            ));
+          ?>
+          <?php if ($groupMenuItems): ?>
+            <?php
+              $isCommitteeGroup = $item['key'] === 'committee_group';
+              $groupActive = in_array($activeMenu, array_column($groupMenuItems, 'key'), true);
+              $groupId = $isCommitteeGroup ? 'sidebarCommitteeLinks' : 'sidebarRequestLinks';
+              $groupLabel = $isCommitteeGroup ? 'Committee' : 'Requests';
+              $groupIcon = $isCommitteeGroup ? 'bi-people' : 'bi-inboxes';
+            ?>
+            <li class="nav-item nav-group <?= $groupActive ? 'is-open' : '' ?>">
+              <button type="button" class="nav-group-toggle <?= $groupActive ? 'active' : '' ?>"
+                      aria-expanded="<?= $groupActive ? 'true' : 'false' ?>"
+                      aria-controls="<?= e($groupId) ?>">
+                <span class="nav-icon-wrapper"><i class="bi <?= e($groupIcon) ?>"></i></span>
+                <span class="nav-label"><?= e($groupLabel) ?></span>
+                <i class="bi bi-chevron-down nav-group-chevron" aria-hidden="true"></i>
+              </button>
+              <ul class="nav-submenu" id="<?= e($groupId) ?>">
+                <?php foreach ($groupMenuItems as $child): ?>
+                  <li class="nav-subitem">
+                    <a class="nav-link nav-sublink <?= $activeMenu === $child['key'] ? 'active' : '' ?>"
+                       href="<?= e(APP_URL . $child['url']) ?>">
+                      <span class="nav-icon-wrapper"><i class="bi <?= e($child['icon']) ?>"></i></span>
+                      <span class="nav-label"><?= e($child['label']) ?></span>
+                      <?php if ($child['key'] === 'task_requests' && isAdmin() && $pendingTaskRequestCount > 0): ?>
+                        <span class="badge rounded-pill sidebar-count-badge task-request-count-badge ms-auto" aria-label="<?= $pendingTaskRequestCount ?> pending task requests"><?= $pendingTaskRequestCount > 99 ? '99+' : $pendingTaskRequestCount ?></span>
+                      <?php endif; ?>
+                      <?php if ($child['key'] === 'approval_center' && $pendingApprovalRequestCount > 0): ?>
+                        <span class="badge rounded-pill sidebar-count-badge approval-count-badge ms-auto" aria-label="<?= $pendingApprovalRequestCount ?> pending approval requests"><?= $pendingApprovalRequestCount > 99 ? '99+' : $pendingApprovalRequestCount ?></span>
+                      <?php endif; ?>
+                      <?php if ($activeMenu === $child['key']): ?><span class="nav-indicator"></span><?php endif; ?>
+                    </a>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            </li>
+          <?php endif; ?>
+          <?php continue; ?>
+        <?php endif; ?>
         <?php if (!in_array($role, $item['roles'], true)) continue; ?>
+        <?php if (($item['section'] ?? null) !== $lastSection): ?>
+          <?php $lastSection = $item['section'] ?? null; ?>
+          <?php if ($lastSection !== null): ?>
+            <li class="nav-section-label" role="separator"><?= e($lastSection) ?></li>
+          <?php endif; ?>
+        <?php endif; ?>
         <li class="nav-item">
           <a class="nav-link <?= $activeMenu === $item['key'] ? 'active' : '' ?>"
              href="<?= e(APP_URL . $item['url']) ?>">
@@ -271,11 +399,114 @@ $menuItems = [
   text-transform: uppercase;
   white-space: normal;
   padding: 4px 10px 8px 10px;
+  margin-top: 10px;
+  color: var(--sb-text-faint);
   transition: all 0.3s ease;
 }
 
 .nav-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
 .nav-item { width: 100%; }
+
+.nav-group { margin: 1px 0 3px; }
+.nav-group-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--sb-text-body);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 510;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.nav-group-toggle:hover,
+.nav-group-toggle.active {
+  color: var(--sb-text-heading);
+  background: var(--sb-surface-2);
+}
+.nav-group-toggle .nav-label {
+  flex: 1;
+}
+.nav-group-chevron {
+  color: var(--sb-text-muted);
+  font-size: 10px;
+  transition: transform 0.18s ease;
+}
+.nav-group.is-open .nav-group-chevron {
+  transform: rotate(180deg);
+}
+.nav-submenu {
+  display: none;
+  list-style: none;
+  margin: 2px 0 5px 21px;
+  padding: 3px 0 3px 9px;
+  border-left: 1px solid var(--sb-border);
+}
+.nav-group.is-open .nav-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-count-badge {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50% !important;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+  text-align: center;
+}
+.approval-count-badge {
+  border-color: rgba(45, 212, 191, 0.45);
+  color: #062b35;
+  background: #5eead4;
+  box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.12);
+}
+.task-request-count-badge {
+  border-color: rgba(248, 113, 113, 0.35);
+  color: #b42332;
+  background: #fff0f1;
+  box-shadow: 0 0 0 2px rgba(255, 240, 241, 0.1);
+}
+.sidebar.collapsed .nav-sublink .sidebar-count-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  padding: 3px 4px;
+  font-size: 10px;
+}
+.nav-subitem { width: 100%; }
+.nav-sublink {
+  min-height: 36px;
+  padding: 6px 8px;
+  gap: 8px;
+  color: var(--sb-text-muted);
+  font-size: 12px;
+}
+.nav-sublink .nav-icon-wrapper {
+  width: 21px;
+  height: 21px;
+  font-size: 12px;
+}
+.nav-sublink:hover {
+  transform: none;
+  box-shadow: none;
+}
+.nav-sublink.active {
+  border-width: 1px;
+}
 
 .nav-link {
   display: flex;
@@ -325,6 +556,12 @@ $menuItems = [
 .sidebar.collapsed .sidebar-header { padding: 16px 10px; justify-content: center; }
 .sidebar.collapsed .brand-icon-wrapper { width: 38px; height: 38px; }
 .sidebar.collapsed .sidebar-nav { padding: 10px 8px; }
+.sidebar.collapsed .nav-group-toggle { justify-content: center; padding: 8px; }
+.sidebar.collapsed .nav-group-toggle .nav-label,
+.sidebar.collapsed .nav-group-chevron { display: none !important; }
+.sidebar.collapsed .nav-submenu { margin: 2px 0 5px; padding: 3px 0; border-left: 0; }
+.sidebar.collapsed .nav-group.is-open .nav-submenu { display: flex; }
+.sidebar.collapsed .nav-sublink { justify-content: center; padding: 8px; gap: 0; }
 .sidebar.collapsed .nav-link { padding: 8px; justify-content: center; gap: 0; }
 .sidebar.collapsed .nav-link:hover { background: var(--sb-surface-2); transform: scale(1.1); box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2); }
 .sidebar.collapsed .nav-link.active { background: var(--sb-active-background); }
@@ -376,6 +613,15 @@ $menuItems = [
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.nav-group-toggle').forEach(function(toggle) {
+    toggle.addEventListener('click', function() {
+      const group = toggle.closest('.nav-group');
+      if (!group) return;
+      const isOpen = group.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+  });
+
   document.querySelectorAll('.brand-icon-wrapper').forEach(function(wrapper) {
     const image = wrapper.querySelector('.brand-icon-img');
     if (!image || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;

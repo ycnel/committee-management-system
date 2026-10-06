@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(false, 'Invalid request method.');
 requireCsrf();
@@ -11,10 +11,16 @@ if ($id === currentUserId()) jsonResponse(false, 'You cannot delete your own acc
 
 $pdo = db();
 try {
-    $stmt = $pdo->prepare('SELECT full_name FROM users WHERE id = :id');
+    $stmt = $pdo->prepare('SELECT full_name, r.name AS role_name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = :id');
     $stmt->execute([':id' => $id]);
     $user = $stmt->fetch();
     if (!$user) jsonResponse(false, 'User not found.');
+
+    // Same administrator-account guard as ajax_user_save.php: a plain
+    // Administrator cannot delete an Administrator or Super Admin account.
+    if (!canManageAdminAccounts() && in_array($user['role_name'], [ROLE_ADMIN, ROLE_SUPER_ADMIN], true)) {
+        jsonResponse(false, 'Only a Super Admin can delete an administrator-level account.');
+    }
 
     $del = $pdo->prepare('DELETE FROM users WHERE id = :id');
     $del->execute([':id' => $id]);

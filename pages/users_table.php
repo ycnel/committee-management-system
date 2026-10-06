@@ -59,16 +59,23 @@ $rows = $stmt->fetchAll();
           <td><span class="badge bg-light text-dark border"><?= e($r['role_name']) ?></span></td>
           <td><span class="badge bg-<?= $r['status'] === 'Active' ? 'success' : 'secondary' ?>"><?= e($r['status']) ?></span></td>
           <td class="text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary btn-edit-user" data-id="<?= (int)$r['id'] ?>" title="Edit">
-              <i class="bi bi-pencil-square"></i>
-            </button>
-            <?php if ((int)$r['id'] !== currentUserId()): ?>
-              <button type="button" class="btn btn-sm btn-outline-danger"
-                      data-confirm-delete="user &quot;<?= e($r['full_name']) ?>&quot;"
-                      data-delete-url="<?= e(APP_URL) ?>/pages/ajax_user_delete.php?id=<?= (int)$r['id'] ?>"
-                      title="Delete">
-                <i class="bi bi-trash"></i>
+            <?php $isAdminLevelRow = in_array($r['role_name'], [ROLE_ADMIN, ROLE_SUPER_ADMIN], true); ?>
+            <?php if (!$isAdminLevelRow || canManageAdminAccounts()): ?>
+              <button type="button" class="btn btn-sm btn-outline-primary btn-edit-user" data-id="<?= (int)$r['id'] ?>" title="Edit">
+                <i class="bi bi-pencil-square"></i>
               </button>
+              <?php if ((int)$r['id'] !== currentUserId()): ?>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        data-confirm-delete="user &quot;<?= e($r['full_name']) ?>&quot;"
+                        data-delete-url="<?= e(APP_URL) ?>/pages/ajax_user_delete.php?id=<?= (int)$r['id'] ?>"
+                        title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              <?php endif; ?>
+            <?php else: ?>
+              <span class="text-muted small" title="Only a Super Admin can manage this account">
+                <i class="bi bi-lock"></i>
+              </span>
             <?php endif; ?>
           </td>
         </tr>

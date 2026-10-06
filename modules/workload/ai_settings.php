@@ -14,7 +14,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/GeminiAI.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 
 $pageTitle  = 'Smart AI Workload Settings';
 $activeMenu = 'workload';
@@ -47,7 +47,7 @@ include __DIR__ . '/../../layouts/header.php';
 <div class="app-wrapper">
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content admin-polished-page smart-ai-settings-page">
   <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
   <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
     

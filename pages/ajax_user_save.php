@@ -9,7 +9,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') jsonResponse(false, 'Invalid request method.');
 requireCsrf();
@@ -48,9 +48,33 @@ if (!empty($errors)) jsonResponse(false, implode(' ', $errors));
 $pdo = db();
 
 try {
-    $roleCheck = $pdo->prepare('SELECT id FROM roles WHERE id = :id');
+    $roleCheck = $pdo->prepare('SELECT id, name FROM roles WHERE id = :id');
     $roleCheck->execute([':id' => $roleId]);
-    if (!$roleCheck->fetch()) jsonResponse(false, 'Selected role does not exist.');
+    $targetRole = $roleCheck->fetch();
+    if (!$targetRole) jsonResponse(false, 'Selected role does not exist.');
+
+    // ---- Administrator-account privilege-escalation guard ----------
+    // "Managing administrator-level accounts" (role-hierarchy revision
+    // §2/§3) is a Super Admin-only capability. A plain Administrator keeps
+    // full User Management for every other role, but can neither assign
+    // Administrator/Super Admin to anyone (including itself) nor edit an
+    // account that already holds one of those two roles.
+    $adminLevelRoles = [ROLE_ADMIN, ROLE_SUPER_ADMIN];
+    if (!canManageAdminAccounts()) {
+        if (in_array($targetRole['name'], $adminLevelRoles, true)) {
+            jsonResponse(false, 'Only a Super Admin can create or assign an administrator-level role.');
+        }
+        if ($id > 0) {
+            $existingRoleStmt = $pdo->prepare(
+                'SELECT r.name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id = :id'
+            );
+            $existingRoleStmt->execute([':id' => $id]);
+            $existingRoleName = $existingRoleStmt->fetchColumn();
+            if ($existingRoleName !== false && in_array($existingRoleName, $adminLevelRoles, true)) {
+                jsonResponse(false, 'Only a Super Admin can modify an administrator-level account.');
+            }
+        }
+    }
 
     $dupStmt = $pdo->prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(:email) AND id != :id');
     $dupStmt->execute([':email' => $email, ':id' => $id]);

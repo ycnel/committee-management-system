@@ -46,6 +46,26 @@ if (!empty($errors)) jsonResponse(false, implode(' ', $errors));
 $pdo = db();
 
 try {
+    if ($category !== '') {
+        $committeeStmt = $pdo->prepare(
+            "SELECT 1 FROM committees WHERE committee_name = :name AND status = 'Active' LIMIT 1"
+        );
+        $committeeStmt->execute([':name' => $category]);
+        $isActiveCommittee = (bool)$committeeStmt->fetchColumn();
+
+        if (!$isActiveCommittee && $id > 0) {
+            $legacyCategoryStmt = $pdo->prepare(
+                'SELECT 1 FROM jurisdictions WHERE jurisdiction_id = :id AND category = :category LIMIT 1'
+            );
+            $legacyCategoryStmt->execute([':id' => $id, ':category' => $category]);
+            $isActiveCommittee = (bool)$legacyCategoryStmt->fetchColumn();
+        }
+
+        if (!$isActiveCommittee) {
+            jsonResponse(false, 'Select an active committee from the list.');
+        }
+    }
+
     $dupStmt = $pdo->prepare('SELECT jurisdiction_id FROM jurisdictions WHERE LOWER(jurisdiction_name) = LOWER(:name) AND jurisdiction_id != :id');
     $dupStmt->execute([':name' => $name, ':id' => $id]);
     if ($dupStmt->fetch()) jsonResponse(false, 'A jurisdiction with this name already exists.');

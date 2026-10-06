@@ -8,7 +8,7 @@
  */
 
 require_once __DIR__ . '/../../includes/auth.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_COMMITTEE, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]);
 session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $jurisdictionId = (int)($_GET['jurisdiction_id'] ?? 0);

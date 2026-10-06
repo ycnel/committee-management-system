@@ -16,6 +16,27 @@ $pageTitle  = 'Dashboard';
 $activeMenu = 'dashboard';
 $pdo = db();
 $user = currentUser();
+$pendingTaskRequestCount = null;
+if (isAdmin()) {
+    $pendingTaskRequestCount = (int)$pdo->query(
+        "SELECT COUNT(*) FROM workload_assignment_proposals WHERE state = 'Pending'"
+    )->fetchColumn();
+} elseif (currentRole() === ROLE_STAFF) {
+    $chairRequestsStmt = $pdo->prepare(
+        "SELECT COUNT(*)
+         FROM workload_assignment_proposals p
+         INNER JOIN committee_members assignee ON assignee.committee_member_id = p.committee_member_id
+         WHERE p.state = 'Pending'
+           AND assignee.committee_id IN (
+               SELECT committee_id FROM committee_members
+               WHERE user_id = :user_id
+                 AND member_role = 'Chairperson'
+                 AND status = 'Active'
+           )"
+    );
+    $chairRequestsStmt->execute([':user_id' => (int)currentUserId()]);
+    $pendingTaskRequestCount = (int)$chairRequestsStmt->fetchColumn();
+}
 
 if (isCommitteeMember()) {
   include __DIR__ . '/dashboard_member.php';
@@ -304,6 +325,35 @@ include __DIR__ . '/layouts/header.php';
         </div>
       </div>
 
+      <?php if (canManage()): ?>
+        <div class="card hero-card dashboard-task-requests mb-3">
+          <div class="card-body">
+            <div class="member-card-heading">
+              <div>
+                <span class="performance-kicker">Task proposals</span>
+                <h5><?= isAdmin() ? 'Pending Task Requests' : (currentRole() === ROLE_STAFF ? 'Committee Task Requests' : 'My Task Requests') ?></h5>
+              </div>
+              <?php if ($pendingTaskRequestCount !== null): ?>
+                <span class="dashboard-request-count"><?= (int)$pendingTaskRequestCount ?></span>
+              <?php else: ?>
+                <i class="bi bi-clipboard-check dashboard-request-icon" aria-hidden="true"></i>
+              <?php endif; ?>
+            </div>
+            <p class="text-muted small mt-2 mb-3">
+              <?= isAdmin()
+                  ? 'Review proposals waiting for your approval.'
+                  : (currentRole() === ROLE_STAFF
+                      ? 'Review proposals submitted for committees you chair.'
+                      : 'Check the status of your submitted proposals.') ?>
+            </p>
+            <a href="<?= e(APP_URL) ?>/modules/workload/task_requests.php" class="btn btn-outline-primary btn-sm w-100">
+              <?= canManage() ? 'Review requests' : 'View my requests' ?>
+              <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+          </div>
+        </div>
+      <?php endif; ?>
+
       <!-- Personal activity -->
       <div class="card hero-card">
         <div class="card-body">
@@ -332,6 +382,4 @@ include __DIR__ . '/layouts/header.php';
     </div>
   </div>
 
-<?php
-include __DIR__ . '/layouts/footer.php';
-?>
+<?php include __DIR__ . '/layouts/footer.php'; ?>

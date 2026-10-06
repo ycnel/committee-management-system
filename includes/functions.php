@@ -305,6 +305,15 @@ function statusBadge(string $status): string
         'Sent'       => 'info',
         'Active'     => 'success',
         'Inactive'   => 'secondary',
+        // Member Acceptance Validation workflow (workload_assignment_proposals.state)
+        'Pending'    => 'warning',
+        'Awaiting Response' => 'warning',
+        'Accepted'   => 'info',
+        'Declined'   => 'danger',
+        'Rejected'   => 'danger',
+        'Approved'   => 'success',
+        'Reassigned' => 'secondary',
+        'Stopped'    => 'dark',
         // attendance
         'Present'    => 'success',
         'Absent'     => 'danger',

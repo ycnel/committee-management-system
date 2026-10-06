@@ -29,7 +29,7 @@ $notifCount = 0;
 try {
     $pdo = db();
     $notificationStmt = $pdo->prepare(
-        'SELECT notification_id, message, url, read_at
+        'SELECT notification_id, message, url, read_at, created_at
          FROM notifications
          WHERE recipient_user_id = :user_id
          ORDER BY created_at DESC, notification_id DESC

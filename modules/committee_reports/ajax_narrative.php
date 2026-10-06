@@ -11,7 +11,7 @@
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/report_data.php';
 require_once __DIR__ . '/report_narrative.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]); // read/oversight only; canManage() still gates writes
 session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $type = in_array($_GET['type'] ?? '', ['committee', 'workload', 'performance'], true) ? $_GET['type'] : 'committee';

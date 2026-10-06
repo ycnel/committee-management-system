@@ -121,6 +121,7 @@ define('UPLOAD_DIR', __DIR__ . '/../assets/uploads/');
 define('UPLOAD_URL', APP_URL . '/assets/uploads/');
 define('MAX_UPLOAD_SIZE', 10 * 1024 * 1024); // 10 MB
 define('ALLOWED_UPLOAD_EXT', ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg']);
+define('TASK_COMPLETION_UPLOAD_DIR', dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cmas_private_uploads' . DIRECTORY_SEPARATOR . 'task-completion-proofs' . DIRECTORY_SEPARATOR);
 
 // ---- Session settings -----------------------------------------------
 define('SESSION_NAME', 'cmas_session');
@@ -132,6 +133,10 @@ define('IDLE_WARNING_SECONDS', 10); // Show the expiry modal this many seconds b
 // single-session replacement kick so dev sessions are never dropped.
 // Env override: CMAS_SESSION_BYPASS=1
 define('SESSION_TIMEOUT_BYPASS', cmas_env(['CMAS_SESSION_BYPASS'], '0') === '1');
+
+// Local-dev bypass: disables repeated-failure account lockout while testing.
+// Env override: CMAS_LOGIN_LOCKOUT_BYPASS=1
+define('LOGIN_LOCKOUT_BYPASS', cmas_env(['CMAS_LOGIN_LOCKOUT_BYPASS'], '0') === '1');
 
 ini_set('session.gc_maxlifetime', (string)SESSION_LIFETIME);
 ini_set('session.cookie_lifetime', (string)SESSION_LIFETIME);
@@ -164,6 +169,35 @@ define('DEFAULT_PAGE_SIZE', 10);
 define('ROLE_ADMIN', 'Administrator');
 define('ROLE_STAFF', 'Committee Chairperson');
 define('ROLE_COMMITTEE', 'Committee Member');
+
+// ---- Role-hierarchy revision (Phase 1) ---------------------------------
+// Two conceptual layers, kept separate everywhere in the codebase:
+//
+//   SYSTEM AUTHORITY (technical/operational access to CMAS itself)
+//     ROLE_SUPER_ADMIN — backup/restore, AI config, security, admin accounts
+//     ROLE_ADMIN        — day-to-day operational management (existing baseline)
+//
+//   LEGISLATIVE AUTHORITY (committee workflow authority, highest first)
+//     ROLE_PRO_TEMPORE
+//     ROLE_VICE_MAYOR
+//     ROLE_STAFF        — Chairperson: final assignment authority within a committee
+//     ROLE_COMMITTEE    — Committee Member: own assignments only
+//
+// A role from one layer does not imply privileges from the other: e.g.
+// ROLE_SUPER_ADMIN does not gain canManage() (committee/assignment write
+// access) just by being technically "above" everyone, and ROLE_STAFF does
+// not gain backup/restore or AI configuration just by outranking members.
+// See includes/auth.php for the functions that enforce this split.
+define('ROLE_SUPER_ADMIN', 'Super Admin');
+define('ROLE_PRO_TEMPORE', 'Pro Tempore');
+define('ROLE_VICE_MAYOR', 'Vice Mayor');
+
+// Every role that gets pure read/oversight visibility into committee
+// operations (view committees, workload, performance, reports) without
+// ever gaining canManage()'s write access. Used to keep the many
+// requireRole([...]) call sites across modules/ consistent instead of
+// repeating this list at every page.
+define('LEGISLATIVE_OVERSIGHT_ROLES', [ROLE_PRO_TEMPORE, ROLE_VICE_MAYOR]);
 
 date_default_timezone_set(APP_TIMEZONE);
 

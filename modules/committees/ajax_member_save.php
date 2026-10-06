@@ -22,16 +22,21 @@ requireCsrf();
 $committeeId  = (int)($_POST['committee_id'] ?? 0);
 $userId       = (int)($_POST['user_id'] ?? 0);
 $memberRole   = clean($_POST['member_role'] ?? 'Member');
+$politicalGroup = clean($_POST['political_group'] ?? '');
 $assignedDate = clean($_POST['assigned_date'] ?? '') ?: date('Y-m-d');
 
 $allowedRoles = ['Chairperson', 'Vice Chairperson', 'Member'];
+$allowedGroups = ['', 'Majority', 'Minority'];
 
 $errors = [];
 if ($committeeId <= 0) $errors[] = 'Invalid committee.';
 if ($userId <= 0) $errors[] = 'Please select a user to assign.';
 if (!in_array($memberRole, $allowedRoles, true)) $errors[] = 'Invalid committee role.';
+if (!in_array($politicalGroup, $allowedGroups, true)) $errors[] = 'Invalid political group.';
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $assignedDate)) $errors[] = 'Invalid assigned date.';
 if (!empty($errors)) jsonResponse(false, implode(' ', $errors));
+
+$politicalGroupValue = $politicalGroup !== '' ? $politicalGroup : null;
 
 $pdo = db();
 
@@ -67,16 +72,16 @@ try {
 
     if ($existingRow) {
         $stmt = $pdo->prepare(
-            "UPDATE committee_members SET member_role = :role, assigned_date = :date, status = 'Active'
+            "UPDATE committee_members SET member_role = :role, political_group = :group, assigned_date = :date, status = 'Active'
              WHERE committee_member_id = :id"
         );
-        $stmt->execute([':role' => $memberRole, ':date' => $assignedDate, ':id' => $existingRow['committee_member_id']]);
+        $stmt->execute([':role' => $memberRole, ':group' => $politicalGroupValue, ':date' => $assignedDate, ':id' => $existingRow['committee_member_id']]);
     } else {
         $stmt = $pdo->prepare(
-            "INSERT INTO committee_members (committee_id, user_id, member_role, assigned_date, status, created_at)
-             VALUES (:cid, :uid, :role, :date, 'Active', NOW())"
+            "INSERT INTO committee_members (committee_id, user_id, member_role, political_group, assigned_date, status, created_at)
+             VALUES (:cid, :uid, :role, :group, :date, 'Active', NOW())"
         );
-        $stmt->execute([':cid' => $committeeId, ':uid' => $userId, ':role' => $memberRole, ':date' => $assignedDate]);
+        $stmt->execute([':cid' => $committeeId, ':uid' => $userId, ':role' => $memberRole, ':group' => $politicalGroupValue, ':date' => $assignedDate]);
     }
 
     $activityId = logActivity(currentUserId(), 'Insert', $user['full_name'] . ' assigned to committee "' . $committee['committee_name'] . '" as ' . $memberRole . '.');

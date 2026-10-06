@@ -10,7 +10,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/report_queries.php';
-requireRole([ROLE_ADMIN, ROLE_STAFF]);
+requireRole([ROLE_ADMIN, ROLE_STAFF, ROLE_SUPER_ADMIN, ...LEGISLATIVE_OVERSIGHT_ROLES]); // read/oversight only; canManage() still gates writes
 
 $pageTitle  = 'Reports & Analytics';
 $activeMenu = 'reports_analytics';
@@ -96,23 +96,27 @@ include __DIR__ . '/../../layouts/header.php';
 <div class="app-wrapper">
   <?php include __DIR__ . '/../../layouts/sidebar.php'; ?>
 
-  <div class="main-content">
+  <div class="main-content reports-analytics-page">
   <?php include __DIR__ . '/../../layouts/content-topbar.php'; ?>
-  <div class="breadcrumb-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-    <div>
-      <h5 class="mb-0"><i class="bi bi-bar-chart-line text-primary"></i> Reports &amp; Analytics</h5>
-      <small class="text-muted">System-wide metrics, workload analytics, and committee breakdowns.</small>
+  <div class="breadcrumb-bar reports-analytics-hero d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div class="reports-analytics-heading">
+      <span class="reports-analytics-icon"><i class="bi bi-bar-chart-line"></i></span>
+      <div><span class="reports-analytics-eyebrow">Performance intelligence</span>
+        <h5 class="mb-1">Reports &amp; Analytics</h5>
+        <small>System-wide workload metrics, trends, and committee performance.</small>
+      </div>
     </div>
-    <div class="d-flex gap-2 no-print">
-      <a class="btn btn-outline-secondary btn-sm" href="export_csv.php?date_from=<?= e($dateFrom ?? '') ?>&date_to=<?= e($dateTo ?? '') ?>"><i class="bi bi-file-earmark-excel"></i> Export CSV</a>
-      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+    <div class="reports-analytics-actions d-flex gap-2 no-print">
+      <a class="btn btn-outline-secondary btn-sm" href="export_csv.php?date_from=<?= e($dateFrom ?? '') ?>&date_to=<?= e($dateTo ?? '') ?>"><i class="bi bi-download"></i> Export CSV</a>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> Print report</button>
     </div>
   </div>
 
   <!-- Date range filter -->
-  <div class="card mb-3 no-print">
-    <div class="card-body py-3">
-      <form method="get" id="rangeFilterForm" class="d-flex flex-wrap align-items-end gap-3">
+  <div class="card reports-analytics-filter mb-3 no-print">
+    <div class="card-body">
+      <form method="get" id="rangeFilterForm" class="reports-filter-form d-flex flex-wrap align-items-end gap-3">
+        <div class="reports-filter-title"><span class="reports-section-eyebrow">Date range</span><strong>Filter analytics</strong></div>
         <?php if ($dateFrom || $dateTo): ?>
           <a href="index.php" class="badge badge-soft-neutral align-self-center text-decoration-none" title="Clear date filter">
             <i class="bi bi-funnel"></i> <?= e($dateFrom ? formatDate($dateFrom) : 'Start') ?> – <?= e($dateTo ? formatDate($dateTo) : 'Today') ?> <i class="bi bi-x-lg ms-1"></i>
@@ -134,8 +138,8 @@ include __DIR__ . '/../../layouts/header.php';
           <a href="index.php" class="btn btn-outline-secondary btn-sm">Reset</a>
         </div>
         <div class="vr d-none d-lg-block" style="height:30px;opacity:.25;"></div>
-        <div class="ms-auto">
-          <label class="form-label small mb-1 text-muted">Quick range</label>
+        <div class="reports-quick-ranges ms-auto">
+          <label class="form-label small mb-1 text-muted">Quick select</label>
           <div class="btn-group btn-group-sm" role="group" aria-label="Quick date ranges">
             <button type="button" class="btn btn-outline-secondary" data-range="7d">7 days</button>
             <button type="button" class="btn btn-outline-secondary" data-range="30d">30 days</button>
@@ -149,7 +153,7 @@ include __DIR__ . '/../../layouts/header.php';
   </div>
 
   <!-- KPI cards -->
-  <div class="row g-3 mb-3">
+  <div class="reports-kpi-grid mb-3">
     <?php
     $kpis = [
       ['bi-diagram-3',    (int)$totals['committees'],   'Active Committees'],
@@ -160,10 +164,8 @@ include __DIR__ . '/../../layouts/header.php';
       ['bi-percent',      $completionRate . '%',        'Completion Rate'],
     ];
     foreach ($kpis as [$icon, $value, $label]): ?>
-      <div class="col-6 col-lg-2">
-        <div class="card stat-card activity-summary-card">
-          <div class="card-body"><i class="bi <?= e($icon) ?> stat-icon"></i><div class="stat-value"><?= e((string)$value) ?></div><div class="stat-label"><?= e($label) ?></div></div>
-        </div>
+      <div class="card reports-kpi-card">
+        <div class="card-body"><span class="reports-kpi-icon"><i class="bi <?= e($icon) ?>"></i></span><div><div class="reports-kpi-value"><?= e((string)$value) ?></div><div class="reports-kpi-label"><?= e($label) ?></div></div></div>
       </div>
     <?php endforeach; ?>
   </div>
@@ -171,41 +173,60 @@ include __DIR__ . '/../../layouts/header.php';
   <!-- Charts -->
   <div class="row g-3 mb-3">
     <div class="col-lg-4">
-      <div class="card hero-card h-100"><div class="card-body">
-        <div class="member-card-heading"><div><span class="performance-kicker">Task mix</span><h5>Status Distribution</h5></div><i class="bi bi-pie-chart member-card-heading-icon"></i></div>
-        <div style="height:220px;"><canvas id="statusChart"></canvas></div>
+      <div class="card reports-chart-card h-100"><div class="card-body">
+        <div class="reports-chart-heading"><div><span class="reports-section-eyebrow">Task mix</span><h5>Status Distribution</h5><small>Assignments by current status</small></div><span class="reports-chart-icon"><i class="bi bi-pie-chart"></i></span></div>
+        <div class="reports-chart-canvas reports-chart-canvas--donut"><canvas id="statusChart"></canvas></div>
       </div></div>
     </div>
     <div class="col-lg-8">
-      <div class="card hero-card h-100"><div class="card-body">
-        <div class="member-card-heading"><div><span class="performance-kicker">Last 6 months</span><h5>Assignments Created</h5></div><i class="bi bi-bar-chart member-card-heading-icon"></i></div>
-        <div style="height:220px;"><canvas id="monthlyChart"></canvas></div>
+      <div class="card reports-chart-card h-100"><div class="card-body">
+        <div class="reports-chart-heading"><div><span class="reports-section-eyebrow">Last 6 months</span><h5>Assignments Created</h5><small>Monthly assignment volume</small></div><span class="reports-chart-icon"><i class="bi bi-bar-chart"></i></span></div>
+        <div class="reports-chart-canvas"><canvas id="monthlyChart"></canvas></div>
       </div></div>
     </div>
   </div>
 
   <div class="row g-3 mb-3">
     <div class="col-lg-6">
-      <div class="card hero-card h-100"><div class="card-body">
-        <div class="member-card-heading"><div><span class="performance-kicker">Top 10</span><h5>Workload per Member</h5></div><i class="bi bi-person-lines-fill member-card-heading-icon"></i></div>
-        <div style="height:260px;"><canvas id="memberChart"></canvas></div>
+      <div class="card reports-chart-card h-100"><div class="card-body">
+        <div class="reports-chart-heading"><div><span class="reports-section-eyebrow">Top 10 members</span><h5>Workload per Member</h5><small>Assignments by member</small></div><span class="reports-chart-icon"><i class="bi bi-person-lines-fill"></i></span></div>
+        <div class="reports-chart-canvas reports-chart-canvas--ranked" style="height:<?= max(260, count($memberLoad) * 28) ?>px;">
+          <?php if (empty($memberLoad)): ?>
+            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-center text-muted">
+              <i class="bi bi-person-lines-fill" style="font-size:28px;"></i>
+              <p class="small mt-2 mb-0">No assignment data for members in this date range.</p>
+            </div>
+          <?php else: ?>
+            <canvas id="memberChart"></canvas>
+          <?php endif; ?>
+        </div>
       </div></div>
     </div>
     <div class="col-lg-6">
-      <div class="card hero-card h-100"><div class="card-body">
-        <div class="member-card-heading"><div><span class="performance-kicker">Top 12</span><h5>Completion by Committee</h5></div><i class="bi bi-graph-up-arrow member-card-heading-icon"></i></div>
-        <div style="height:260px;"><canvas id="committeeChart"></canvas></div>
+      <div class="card reports-chart-card h-100"><div class="card-body">
+        <div class="reports-chart-heading"><div><span class="reports-section-eyebrow">Top 12 committees</span><h5>Completion by Committee</h5><small>Completed assignments as a share of total</small></div><span class="reports-chart-icon"><i class="bi bi-graph-up-arrow"></i></span></div>
+        <div class="reports-chart-canvas reports-chart-canvas--ranked" style="height:<?= max(260, count($committeeChart) * 28) ?>px;">
+          <?php if (empty($committeeChart)): ?>
+            <div class="h-100 d-flex flex-column align-items-center justify-content-center text-center text-muted">
+              <i class="bi bi-graph-up-arrow" style="font-size:28px;"></i>
+              <p class="small mt-2 mb-0">No committee assignment data for this date range.</p>
+            </div>
+          <?php else: ?>
+            <canvas id="committeeChart"></canvas>
+          <?php endif; ?>
+        </div>
       </div></div>
     </div>
   </div>
 
-  <div class="card hero-card mb-3"><div class="card-body">
-    <div class="member-card-heading"><div><span class="performance-kicker"><?= e(formatDate($trendFrom)) ?> – <?= e(formatDate($trendTo)) ?></span><h5>System Activity Trend</h5></div><i class="bi bi-activity member-card-heading-icon"></i></div>
-    <div style="height:200px;"><canvas id="activityChart"></canvas></div>
+  <div class="card reports-chart-card mb-3"><div class="card-body">
+    <div class="reports-chart-heading"><div><span class="reports-section-eyebrow"><?= e(formatDate($trendFrom)) ?> – <?= e(formatDate($trendTo)) ?></span><h5>System Activity Trend</h5><small>Recorded system activity over time</small></div><span class="reports-chart-icon"><i class="bi bi-activity"></i></span></div>
+    <div class="reports-chart-canvas reports-chart-canvas--activity"><canvas id="activityChart"></canvas></div>
   </div></div>
 
   <!-- Per-committee breakdown -->
-  <div class="card">
+  <div class="card reports-breakdown-card">
+    <div class="reports-breakdown-heading"><div><span class="reports-section-eyebrow">Committee overview</span><h5>Performance Breakdown</h5><small>Membership and task status by committee for the selected period.</small></div><span class="reports-breakdown-count"><?= count($breakdown) ?> committees</span></div>
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
         <thead><tr><th>Committee</th><th>Status</th><th class="text-center">Members</th><th class="text-center">Assignments</th><th class="text-center">Completed</th><th class="text-center">In Progress</th><th class="text-center">Pending</th><th class="text-center">Overdue</th><th class="text-end">Completion</th></tr></thead>
@@ -292,41 +313,58 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   if (!window.Chart) return;
+  Chart.defaults.font.family = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+  Chart.defaults.font.size = 10;
+  Chart.defaults.color = '#718397';
+  Chart.defaults.plugins.tooltip.backgroundColor = '#17324d';
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.plugins.tooltip.titleFont = { weight: '600' };
+  Chart.defaults.plugins.tooltip.bodyFont = { weight: '500' };
 
   new Chart(document.getElementById('statusChart'), {
     type: 'doughnut',
     data: { labels: <?= json_encode(array_keys($statusCounts)) ?>,
             datasets: [{ data: <?= json_encode(array_values($statusCounts)) ?>,
-                         backgroundColor: ['#6B7280', '#2f6fed', '#198754', '#dc3545'], borderWidth: 0 }] },
-    options: { plugins: { legend: { position: 'bottom' } }, responsive: true, maintainAspectRatio: false, cutout: '62%' }
+                         backgroundColor: ['#94a3b8', '#3974a5', '#239276', '#d46b72'],
+                         hoverBackgroundColor: ['#8393a8', '#2f638f', '#1d7f67', '#bf5a62'],
+                         borderWidth: 3, borderColor: '#fff', hoverOffset: 5, spacing: 2 }] },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 7, boxHeight: 7, padding: 15, font: { size: 9 } } } },
+      responsive: true, maintainAspectRatio: false, cutout: '68%'
+    }
   });
 
   new Chart(document.getElementById('monthlyChart'), {
     type: 'bar',
     data: { labels: <?= json_encode($monthlyLabels) ?>,
-            datasets: [{ label: 'Assignments', data: <?= json_encode($monthlyData) ?>, backgroundColor: '#0B2E59', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }, responsive: true, maintainAspectRatio: false }
+            datasets: [{ label: 'Assignments', data: <?= json_encode($monthlyData) ?>, backgroundColor: '#315f86', hoverBackgroundColor: '#173c62', borderRadius: 6, maxBarThickness: 38 }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(43, 73, 102, .08)' }, ticks: { precision: 0, padding: 8 } }, x: { border: { display: false }, grid: { display: false }, ticks: { padding: 7 } } }, responsive: true, maintainAspectRatio: false }
   });
 
+  <?php if (!empty($memberLoad)): ?>
   new Chart(document.getElementById('memberChart'), {
     type: 'bar',
     data: { labels: <?= json_encode(array_column($memberLoad, 'full_name')) ?>,
-            datasets: [{ label: 'Assignments', data: <?= json_encode(array_map('intval', array_column($memberLoad, 'n'))) ?>, backgroundColor: '#D4AF37', borderRadius: 5 }] },
-    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { grid: { display: false } } }, responsive: true, maintainAspectRatio: false }
+            datasets: [{ label: 'Assignments', data: <?= json_encode(array_map('intval', array_column($memberLoad, 'n'))) ?>, backgroundColor: '#bd9a48', hoverBackgroundColor: '#a98230', borderRadius: 5, barThickness: 12 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(43, 73, 102, .08)' }, ticks: { precision: 0, padding: 7 } }, y: { border: { display: false }, grid: { display: false }, ticks: { autoSkip: false, font: { size: 9 }, padding: 8 } } }, responsive: true, maintainAspectRatio: false }
   });
+  <?php endif; ?>
 
+  <?php if (!empty($committeeChart)): ?>
   new Chart(document.getElementById('committeeChart'), {
     type: 'bar',
     data: { labels: <?= json_encode(array_column($committeeChart, 'committee_name')) ?>,
-            datasets: [{ label: 'Completion %', data: <?= json_encode(array_map(function ($r) { return (int)$r['assignments'] > 0 ? round(((int)$r['completed'] / (int)$r['assignments']) * 100) : 0; }, $committeeChart)) ?>, backgroundColor: '#1F4E85', borderRadius: 5 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100, ticks: { callback: function (v) { return v + '%'; } } }, x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 45 } } }, responsive: true, maintainAspectRatio: false }
+            datasets: [{ label: 'Completion', data: <?= json_encode(array_map(function ($r) { return (int)$r['assignments'] > 0 ? round(((int)$r['completed'] / (int)$r['assignments']) * 100) : 0; }, $committeeChart)) ?>, backgroundColor: '#3974a5', hoverBackgroundColor: '#24577f', borderRadius: 5, barThickness: 12 }] },
+    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (context) { return 'Completion: ' + context.raw + '%'; } } } }, scales: { x: { beginAtZero: true, max: 100, border: { display: false }, grid: { color: 'rgba(43, 73, 102, .08)' }, ticks: { stepSize: 25, padding: 7, callback: function (v) { return v + '%'; } } }, y: { border: { display: false }, grid: { display: false }, ticks: { autoSkip: false, font: { size: 9 }, padding: 8, callback: function (value) { const label = this.getLabelForValue(value); return label.length > 28 ? label.slice(0, 25) + '…' : label; } } } }, responsive: true, maintainAspectRatio: false }
   });
+  <?php endif; ?>
 
   new Chart(document.getElementById('activityChart'), {
     type: 'line',
     data: { labels: <?= json_encode($trendLabels) ?>,
-            datasets: [{ label: 'Log entries', data: <?= json_encode($trendData) ?>, borderColor: '#2f6fed', backgroundColor: 'rgba(47,111,237,0.12)', fill: true, tension: 0.3, pointRadius: 2 }] },
-    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } }, responsive: true, maintainAspectRatio: false }
+            datasets: [{ label: 'Log entries', data: <?= json_encode($trendData) ?>, borderColor: '#3974a5', backgroundColor: 'rgba(57,116,165,.12)', fill: true, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, pointBackgroundColor: '#fff', pointBorderWidth: 2, pointBorderColor: '#3974a5' }] },
+    options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, border: { display: false }, grid: { color: 'rgba(43, 73, 102, .08)' }, ticks: { precision: 0, padding: 7 } }, x: { border: { display: false }, grid: { display: false }, ticks: { maxTicksLimit: 12, padding: 7 } } }, responsive: true, maintainAspectRatio: false }
   });
 });
 </script>

@@ -38,6 +38,21 @@
         });
       });
     });
+
+    wrap.querySelectorAll('.member-group-select').forEach(sel => {
+      sel.addEventListener('change', function () {
+        const memberId = sel.getAttribute('data-member-id');
+        const csrfToken = window.APP_CSRF_TOKEN || '';
+        appPost(window.APP_URL + '/modules/committees/ajax_member_group.php', {
+          id: memberId,
+          political_group: sel.value,
+          csrf_token: csrfToken
+        }).then(data => {
+          if (data.success) { appToast('success', data.message); reloadRoster(); }
+          else if (!data.session_expired) { Swal.fire('Error', data.message, 'error'); reloadRoster(); }
+        });
+      });
+    });
   }
 
   if (window.registerDeleteHandler) window.registerDeleteHandler(reloadRoster);

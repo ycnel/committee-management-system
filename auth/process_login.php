@@ -37,11 +37,13 @@ $pdo = db();
 $security = new LoginSecurity($pdo);
 
 // ---- Account lockout check (server-side, before touching the password) ----
-$lockRemaining = $security->lockSecondsRemaining($email);
-if ($lockRemaining > 0) {
-    $mins = ceil($lockRemaining / 60);
-    setFlash('danger', "This account is temporarily locked due to repeated failed login attempts. Please try again in about {$mins} minute(s).");
-    redirect(APP_URL . '/login.php');
+if (!LOGIN_LOCKOUT_BYPASS) {
+    $lockRemaining = $security->lockSecondsRemaining($email);
+    if ($lockRemaining > 0) {
+        $mins = ceil($lockRemaining / 60);
+        setFlash('danger', "This account is temporarily locked due to repeated failed login attempts. Please try again in about {$mins} minute(s).");
+        redirect(APP_URL . '/login.php');
+    }
 }
 
 try {
@@ -56,12 +58,14 @@ try {
     $user = $stmt->fetch();
 
     if (!$user || !password_verify($password, $user['password'])) {
-        $security->recordFailure($email);
+        if (!LOGIN_LOCKOUT_BYPASS) {
+            $security->recordFailure($email);
+        }
         logActivity(null, 'Login Failed', 'Email: ' . $email);
 
         // Check the actual lock state directly — recordFailure() applies
         // the escalating lock duration for this failure count.
-        if ($security->isLocked($email)) {
+        if (!LOGIN_LOCKOUT_BYPASS && $security->isLocked($email)) {
             $lockLabel = LoginSecurity::durationLabel($security->lockSecondsRemaining($email));
             logActivity(null, 'Account Locked', 'Email: ' . $email . ' locked for ' . $lockLabel . ' after repeated failed attempts.');
             setFlash('danger', "This account has been locked for {$lockLabel} due to repeated failed login attempts.");

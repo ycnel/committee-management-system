@@ -11,7 +11,7 @@
 
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/GeminiAI.php';
-requireRole([ROLE_ADMIN]);
+requireRole([ROLE_ADMIN, ROLE_SUPER_ADMIN]);
 session_write_close(); // read-only endpoint: release the session lock for concurrent requests
 
 $pdo = db();

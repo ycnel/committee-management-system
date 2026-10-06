@@ -19,6 +19,16 @@ $backgroundStmt->execute([':user_id' => currentUserId()]);
 $background = $backgroundStmt->fetch() ?: [];
 $profileBackgroundLocked = !empty($background['id']);
 
+$committeeMembershipStmt = $pdo->prepare(
+    'SELECT c.committee_id, c.committee_name, cm.member_role, cm.political_group
+     FROM committee_members cm
+     INNER JOIN committees c ON c.committee_id = cm.committee_id
+     WHERE cm.user_id = :user_id AND cm.status = "Active"
+     ORDER BY c.committee_name ASC'
+);
+$committeeMembershipStmt->execute([':user_id' => currentUserId()]);
+$committeeMemberships = $committeeMembershipStmt->fetchAll();
+
 include __DIR__ . '/../layouts/header.php';
 ?>
 <div class="app-wrapper">
@@ -45,6 +55,27 @@ include __DIR__ . '/../layouts/header.php';
           </dl>
         </div>
       </div>
+
+      <?php if (!empty($committeeMemberships)): ?>
+      <div class="card profile-card mt-3">
+        <div class="card-header profile-card-header"><span class="profile-card-icon"><i class="bi bi-people-fill"></i></span><span><strong>Committee Memberships</strong><small>Political group and committee role</small></span></div>
+        <div class="list-group list-group-flush">
+          <?php foreach ($committeeMemberships as $membership): ?>
+            <div class="list-group-item d-flex justify-content-between align-items-center gap-2">
+              <div>
+                <div class="fw-semibold small"><?= e($membership['committee_name']) ?></div>
+                <div class="small text-muted"><?= e($membership['member_role']) ?></div>
+              </div>
+              <?php if (!empty($membership['political_group'])): ?>
+                <span class="badge <?= $membership['political_group'] === 'Majority' ? 'bg-success-subtle text-success-emphasis border border-success-subtle' : 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' ?> rounded-pill"><?= e($membership['political_group']) ?></span>
+              <?php else: ?>
+                <span class="text-muted small">Unassigned</span>
+              <?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
 
     <div class="col-lg-7">

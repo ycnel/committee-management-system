@@ -11,73 +11,71 @@ $pdo = db();
 
 $search       = clean($_GET['search'] ?? '');
 $jurisdiction = (int)($_GET['jurisdiction_id'] ?? 0);
-$statusFil    = clean($_GET['status'] ?? '');
 $membersFil   = clean($_GET['members'] ?? '');
-$workFil      = clean($_GET['work'] ?? '');
-$createdFrom  = clean($_GET['created_from'] ?? '');
-$createdTo    = clean($_GET['created_to'] ?? '');
-$createdFrom  = preg_match('/^\d{4}-\d{2}-\d{2}$/', $createdFrom) ? $createdFrom : '';
-$createdTo    = preg_match('/^\d{4}-\d{2}-\d{2}$/', $createdTo) ? $createdTo : '';
 
 $sortableColumns = ['committee_name', 'status', 'date_created', 'member_count'];
-$sortBy  = in_array($_GET['sort'] ?? '', $sortableColumns, true) ? $_GET['sort'] : 'committee_name';
+$requestedSort = $_GET['sort'] ?? 'committee_name';
+$sortBy = in_array($requestedSort, $sortableColumns, true) ? $requestedSort : 'committee_name';
 $sortDir = strtolower($_GET['dir'] ?? 'asc') === 'desc' ? 'DESC' : 'ASC';
 
 $where = [];
 $params = [];
+$rowParams = [];
 if ($search !== '') {
     $where[] = '(c.committee_name LIKE :s1 OR c.description LIKE :s2)';
     $params[':s1'] = $params[':s2'] = '%' . $search . '%';
 }
 if ($jurisdiction > 0) { $where[] = 'c.jurisdiction_id = :jid'; $params[':jid'] = $jurisdiction; }
-if ($statusFil !== '') { $where[] = 'c.status = :status'; $params[':status'] = $statusFil; }
-if ($createdFrom !== '') { $where[] = 'DATE(c.date_created) >= :cfrom'; $params[':cfrom'] = $createdFrom; }
-if ($createdTo !== '')   { $where[] = 'DATE(c.date_created) <= :cto';   $params[':cto'] = $createdTo; }
 
 $memberCountSql = "(SELECT COUNT(*) FROM committee_members cm WHERE cm.committee_id = c.committee_id AND cm.status = 'Active')";
 if ($membersFil === 'none') { $where[] = "$memberCountSql = 0"; }
 elseif ($membersFil === '1-5') { $where[] = "$memberCountSql BETWEEN 1 AND 5"; }
 elseif ($membersFil === '6+') { $where[] = "$memberCountSql >= 6"; }
 
-$openWorkSql = "EXISTS (SELECT 1 FROM committee_members cm2 INNER JOIN workload_assignments wa ON wa.committee_member_id = cm2.committee_member_id WHERE cm2.committee_id = c.committee_id AND wa.status <> 'Completed')";
-if ($workFil === 'open') { $where[] = $openWorkSql; }
-elseif ($workFil === 'none') { $where[] = "NOT $openWorkSql"; }
 if (isCommitteeMember()) {
   $where[] = 'c.committee_id IN (SELECT committee_id FROM committee_members WHERE user_id = :member_uid AND status = \'Active\')';
   $params[':member_uid'] = currentUserId();
+  $rowParams[':member_role_uid'] = currentUserId();
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+$rowParams += $params;
 
 $countStmt = $pdo->prepare("SELECT COUNT(*) FROM committees c $whereSql");
 $countStmt->execute($params);
 $totalRows = (int)$countStmt->fetchColumn();
 $pageInfo = paginate($totalRows);
 
-$sql = "SELECT c.*, j.jurisdiction_name,
+$sql = "SELECT c.*,
                $memberCountSql AS member_count,
                (SELECT COUNT(*) FROM committee_members cm2 INNER JOIN workload_assignments wa ON wa.committee_member_id = cm2.committee_member_id
-                WHERE cm2.committee_id = c.committee_id AND wa.status <> 'Completed') AS open_assignments
+                WHERE cm2.committee_id = c.committee_id AND wa.status <> 'Completed') AS open_assignments"
+        . (isCommitteeMember()
+            ? ", (SELECT cm3.member_role FROM committee_members cm3
+                 WHERE cm3.committee_id = c.committee_id AND cm3.user_id = :member_role_uid AND cm3.status = 'Active'
+                 LIMIT 1) AS my_committee_role"
+            : '') . "
         FROM committees c
-        LEFT JOIN jurisdictions j ON j.jurisdiction_id = c.jurisdiction_id
         $whereSql
         ORDER BY $sortBy $sortDir
         LIMIT {$pageInfo['perPage']} OFFSET {$pageInfo['offset']}";
 $stmt = $pdo->prepare($sql);
-$stmt->execute($params);
+$stmt->execute($rowParams);
 $rows = $stmt->fetchAll();
 
 $statusColors = ['Active' => 'success', 'Inactive' => 'secondary', 'Dissolved' => 'danger'];
 ?>
 <?php if (empty($rows)): ?>
-  <div class="committee-empty-state text-center text-muted py-5">No committees found.</div>
+  <div class="committee-empty-state text-center text-muted py-5"><?= isCommitteeMember() ? 'You are not currently assigned to any active committees.' : 'No committees found.' ?></div>
 <?php else: ?>
   <div class="committee-card-grid">
     <?php foreach ($rows as $r): ?>
       <article class="committee-card committee-row" data-href="view.php?id=<?= (int)$r['committee_id'] ?>" data-id="<?= (int)$r['committee_id'] ?>" tabindex="0">
         <div class="committee-card-details">
           <div class="committee-card-top">
-            <span class="committee-card-jurisdiction" title="<?= e($r['jurisdiction_name'] ?: 'Unassigned jurisdiction') ?>"><i class="bi bi-geo-alt"></i><?= e($r['jurisdiction_name'] ?: 'Unassigned') ?></span>
             <span class="committee-card-status status-<?= e(strtolower($r['status'])) ?>"><?= e($r['status']) ?></span>
+            <?php if (isCommitteeMember() && !empty($r['my_committee_role'])): ?>
+              <span class="committee-member-role"><?= e($r['my_committee_role']) ?> assignment</span>
+            <?php endif; ?>
           </div>
           <a href="view.php?id=<?= (int)$r['committee_id'] ?>" class="committee-card-title">
             <?= e($r['committee_name']) ?>
