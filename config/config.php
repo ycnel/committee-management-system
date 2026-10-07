@@ -121,8 +121,14 @@ define('UPLOAD_DIR', __DIR__ . '/../assets/uploads/');
 define('UPLOAD_URL', APP_URL . '/assets/uploads/');
 define('MAX_UPLOAD_SIZE', 10 * 1024 * 1024); // 10 MB
 define('ALLOWED_UPLOAD_EXT', ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg']);
-define('TASK_COMPLETION_UPLOAD_DIR', dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'cmas_private_uploads' . DIRECTORY_SEPARATOR . 'task-completion-proofs' . DIRECTORY_SEPARATOR);
 
+define(
+    'TASK_COMPLETION_UPLOAD_DIR',
+    dirname(__DIR__) . DIRECTORY_SEPARATOR
+    . 'storage' . DIRECTORY_SEPARATOR
+    . 'private_uploads' . DIRECTORY_SEPARATOR
+    . 'task-completion-proofs' . DIRECTORY_SEPARATOR
+);
 // ---- Session settings -----------------------------------------------
 define('SESSION_NAME', 'cmas_session');
 define('SESSION_LIFETIME', 60 * 60 * 8); // 8-hour maximum cookie lifetime
