@@ -1,0 +1,15 @@
+# Block all direct web access to private uploads.
+# Task-completion proofs are served ONLY through
+# modules/workload/download_completion_proof.php after the caller is
+# authenticated and authorized.
+
+# Apache 2.4+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+# Apache 2.2 fallback
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
